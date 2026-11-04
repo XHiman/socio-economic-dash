@@ -1,0 +1,29 @@
+# /etc/systemd/system/socioecon-api.service
+[Unit]
+Description=Socio-economic dashboard API
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+User=socioecon
+Group=socioecon
+WorkingDirectory=/opt/socioecon/backend
+# chmod 600, owned by root/socioecon. Contains DB_PASSWORD etc.
+EnvironmentFile=/etc/socioecon/api.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
