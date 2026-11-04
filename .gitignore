@@ -29,3 +29,26 @@ dist-ssr
 !.env.example
 create_readonly_user.sql
 api.env.example
+
+# Build output / caches
+coverage
+*.tsbuildinfo
+.vite
+.cache
+.eslintcache
+backend/dist
+frontend/dist
+
+# OS / editor / tooling
+Thumbs.db
+Desktop.ini
+.claude/
+*.swp
+
+# Local-only artifacts (never commit data dumps or server backups)
+*.dump
+*.sql.gz
+*.bak
+vhost-backup.conf
+db/data/
+tmp/
