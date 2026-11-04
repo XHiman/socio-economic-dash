@@ -14,8 +14,8 @@ function Shell() {
       <header className="site-header">
         <div className="wrap header-row">
           <div className="brand">
-            <img src="/Seal_of_Maharashtra.svg" alt="Government of Maharashtra seal" height="44" />
-            <img src="/MITRALogo.svg" alt="MITRA" height="44" />
+            <img src={`${import.meta.env.BASE_URL}Seal_of_Maharashtra.svg`} alt="Government of Maharashtra seal" height="44" />
+            <img src={`${import.meta.env.BASE_URL}MITRALogo.svg`} alt="MITRA" height="44" />
             <div className="brand-text">
               <strong>Socio-Economic Dashboard</strong>
               <span>Maharashtra &middot; District Statistical Abstract</span>
@@ -51,7 +51,7 @@ function Shell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <Shell />
     </BrowserRouter>
   )

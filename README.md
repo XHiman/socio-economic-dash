@@ -6,7 +6,7 @@ State and district views of GDDP **and** the District Statistical Abstract (DSA)
 frontend/   React + TypeScript + Vite + Chart.js (static build)
 backend/    Node/Express read-only JSON API (mysql2, zod, helmet)
 db/         schema, dev users, production read-only-user script
-deploy/     nginx + systemd samples for the VM
+deploy/     Apache + systemd samples for the VM
 ```
 
 Pages: **State** (GSDP, divisions, district ranking), **Districts** (KPIs, GDDP trend, sector mix vs state,
@@ -45,16 +45,20 @@ Anything not curated is still reachable through the Data explorer.
 - API is GET/HEAD only; every parameter validated with zod; all values bound as parameters. Table/column names can't be
   bound, so they come only from an allowlist built from `information_schema` (+ strict identifier regex); bookkeeping columns are never exposed.
 - Generic error responses (no SQL/stack leakage), 8 s query timeout, 1000-row cap, rate limiting, helmet headers.
-- API binds to 127.0.0.1; nginx terminates TLS and adds HSTS/CSP, request limiting. No third-party scripts, fonts or CDNs.
+- API binds to 127.0.0.1; Apache terminates TLS and adds HSTS/CSP, request limiting. No third-party scripts, fonts or CDNs.
 - Secrets only via environment (`.env` is git-ignored).
 
-## Deploying to the VM
+## Deploying to the VM (no Docker there)
 
-1. Load schema + data into the VM's MariaDB; run `db/prod/create_readonly_user.sql` (set a real password).
-2. `cd backend && npm ci && npm run build`; copy `backend/` (`dist`, `package*.json`, `node_modules` via `npm ci --omit=dev`) to `/opt/socioecon/backend`.
-3. Create `/etc/socioecon/api.env` (mode 600) from `.env.example`: `NODE_ENV=production`, `DB_PORT=3306`, `TRUST_PROXY=1`, real `DB_PASSWORD`; no admin vars.
-4. Install `deploy/socioecon-api.service`; `systemctl enable --now socioecon-api`.
-5. `cd frontend && npm ci && npm run build`; copy `dist/` to `/var/www/socioecon`; install `deploy/nginx.conf` with your domain/cert.
-6. Check `https://<host>/api/health`.
+The app is served under **`/Dashboard/Socio-Economic/`** (set in `frontend/vite.config.ts` `base`) alongside other systems.
+MariaDB runs natively on the VM. Docker, `docker-compose.yml`, `db:seed` and `db/prod/push_from_docker.sh` are dev-PC only.
+
+1. Load schema + data into the VM's MariaDB; create the read-only user (`db/prod/create_readonly_user.sql`, real password).
+2. Backend: `cd backend && npm ci && npm run build && npm prune --omit=dev` (Node 22+), keep it at `/opt/socioecon/backend`.
+3. Create `/etc/socioecon/api.env` (mode 640, group `socioecon`) from `deploy/api.env.example` with the real `DB_PASSWORD`.
+4. Install `deploy/socioecon-api.service` (`systemctl enable --now socioecon-api`).
+5. Frontend: `cd frontend && npm ci && npm run build`; copy `dist/*` to `/var/www/socioecon-site/Dashboard/Socio-Economic/`.
+6. Add the directives from `deploy/apache-socioecon.conf` to the existing `<VirtualHost>`; `sudo a2enmod proxy proxy_http headers`; `sudo apachectl configtest && sudo systemctl reload apache2`.
+7. Check `https://<host>/Dashboard/Socio-Economic/api/health` and `https://<host>/Dashboard/Socio-Economic/`.
 
 Tests: `npm --prefix backend test`. Dev-only: `db:seed` refuses to run with `NODE_ENV=production`.

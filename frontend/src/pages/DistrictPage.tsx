@@ -85,7 +85,7 @@ export default function DistrictPage() {
 
   const o = overview.data?.overview
   const growth = o?.perc_lastyr
-  const mapSrc = `/maps/${slugOf(district.name)}.svg`
+  const mapSrc = `${import.meta.env.BASE_URL}maps/${slugOf(district.name)}.svg`
 
   return (
     <>

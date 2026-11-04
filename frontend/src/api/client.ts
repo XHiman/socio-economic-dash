@@ -11,7 +11,7 @@ export class ApiError extends Error {
 const cache = new Map<string, unknown>()
 
 async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
-  const res = await fetch(`/api${path}`, { signal, headers: { Accept: 'application/json' } })
+  const res = await fetch(`${import.meta.env.BASE_URL}api${path}`, { signal, headers: { Accept: 'application/json' } })
   if (!res.ok) {
     let message = 'Request failed'
     try { message = ((await res.json()) as { error?: string }).error ?? message } catch { /* non-JSON error body */ }
