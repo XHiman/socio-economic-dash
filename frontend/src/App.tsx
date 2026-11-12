@@ -1,9 +1,48 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
-import { Loading } from './components/ui'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { DataDisclaimer, Loading } from './components/ui'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ExplorerPage = lazy(() => import('./pages/ExplorerPage'))
+
+/**
+ * "Dashboard" with a "Data explorer" submenu. Opens on hover or keyboard focus (CSS), and on tap/click of the
+ * caret for touch devices; Esc or a click elsewhere closes it.
+ */
+function DashboardMenu() {
+  // Tied to the page it was opened on, so navigating closes it without an effect.
+  const { pathname } = useLocation()
+  const [openAt, setOpenAt] = useState<string | null>(null)
+  const open = openAt === pathname
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) setOpenAt(null) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenAt(null) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('touchstart', onDown); document.removeEventListener('keydown', onKey) }
+  }, [open])
+
+  return (
+    <div ref={ref} className={`nav-group ${open ? 'open' : ''}`}>
+      <NavLink to="/" end className={({ isActive }) => (isActive || pathname.startsWith('/dashboard') ? 'active' : '')}>Dashboard</NavLink>
+      <button
+        type="button" className="nav-caret" aria-haspopup="true" aria-expanded={open} aria-controls="nav-submenu"
+        aria-label="Dashboard menu" onClick={() => setOpenAt(open ? null : pathname)}
+      >
+        ▾
+      </button>
+      <div id="nav-submenu" className="nav-submenu">
+        <div className="nav-submenu-inner">
+          <NavLink to="/explore">Data explorer</NavLink>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function Shell() {
   return (
@@ -20,12 +59,12 @@ function Shell() {
             </div>
           </div>
           <nav aria-label="Primary">
-            <NavLink to="/" end>Dashboard</NavLink>
-            <NavLink to="/explore">Data explorer</NavLink>
+            <DashboardMenu />
           </nav>
         </div>
       </header>
       <main id="main" className="wrap">
+        <DataDisclaimer />
         <Suspense fallback={<Loading />}>
           <Routes>
             <Route path="/" element={<DashboardPage />} />

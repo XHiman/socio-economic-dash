@@ -15,7 +15,7 @@ const sharedUnit = (cols: CardColumn[]) => {
   return u.size === 1 ? [...u][0] || undefined : undefined
 }
 
-interface Spec { type: 'bar' | 'line'; labels: string[]; series: Series[]; stacked: boolean; unit?: string; yMax?: number }
+interface Spec { labels: string[]; series: Series[]; stacked: boolean; horizontal: boolean; unit?: string; yMax?: number }
 
 function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; selectedYear: string | null }) {
   const { years } = h
@@ -25,7 +25,7 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
   const idx = Math.min(pickedIdx ?? initial, keys.length - 1)
   const year = keys[idx]!
   const [tab, setTab] = useState<'chart' | 'table'>('chart')
-  const [flipped, setFlipped] = useState(false)
+  const [timeSeries, setTimeSeries] = useState(false)
   const [metric, setMetric] = useState(h.kind === 'taluka' && stackParts(h).length > 1 ? -1 : 0) // -1 = "All" (stacked)
   const [playing, setPlaying] = useState(false)
   const chartBox = useRef<HTMLDivElement>(null)
@@ -53,46 +53,50 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
   }
   const yearLabels = years.length ? years.map(fy) : ['Latest']
 
+  // Time series keeps the chart's own form (horizontal bars stay horizontal, stacks stay stacked) and moves
+  // the financial years onto the category axis.
   const spec = ((): Spec | null => {
     if (h.kind === 'kpis') return null
     if (h.kind === 'breakdown') {
       const lab = labelFor(h.columns)
       const val = (y: string, c: CardColumn) => h.data[y]?.total?.[c.key] ?? null
-      if (!flipped) {
+      if (!timeSeries) {
         const yMax = Math.max(0, ...keys.flatMap((y) => h.columns.map((c) => val(y, c) ?? 0)))
-        return { type: 'bar', stacked: false, unit: sharedUnit(h.columns), yMax, labels: h.columns.map(lab), series: [{ label: h.title, data: h.columns.map((c) => val(year, c)) }] }
+        return { stacked: false, horizontal: true, unit: sharedUnit(h.columns), yMax, labels: h.columns.map(lab), series: [{ label: h.title, data: h.columns.map((c) => val(year, c)) }] }
       }
       const cols = h.stackable ? parts : h.columns
-      return { type: h.stackable ? 'bar' : 'line', stacked: h.stackable, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => val(y, c)) })) }
+      return { stacked: h.stackable, horizontal: true, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => val(y, c)) })) }
     }
     // taluka / district split
     const cols = all ? parts : [col]
     const lab = labelFor(cols)
-    if (!flipped) {
+    if (!timeSeries) {
       const rowSum = (r: CardData['rows'][number]) => cols.reduce((a, c) => a + (r.values[c.key] ?? 0), 0)
       const yMax = Math.max(0, ...keys.flatMap((y) => (h.data[y]?.rows ?? []).map((r) => (all ? rowSum(r) : r.values[col.key] ?? 0))))
       const rows = h.data[year]?.rows ?? []
       return {
-        type: 'bar', stacked: all, unit: sharedUnit(cols), yMax, labels: rows.map((r) => clean(r.taluka)),
+        stacked: all, horizontal: false, unit: sharedUnit(cols), yMax, labels: rows.map((r) => clean(r.taluka)),
         series: cols.map((c) => ({ label: lab(c), data: rows.map((r) => r.values[c.key] ?? null) })),
       }
     }
     if (all) {
-      return { type: 'bar', stacked: true, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => totalOf(y, c.key)) })) }
+      return { stacked: true, horizontal: false, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => totalOf(y, c.key)) })) }
     }
     const names = [...new Set(keys.flatMap((y) => (h.data[y]?.rows ?? []).map((r) => r.taluka)))].sort()
     return {
-      type: 'line', stacked: false, unit: col.unit, labels: yearLabels,
+      stacked: false, horizontal: false, unit: col.unit, labels: yearLabels,
       series: names.map((n) => ({ label: clean(n), data: keys.map((y) => h.data[y]?.rows.find((r) => r.taluka === n)?.values[col.key] ?? null) })),
     }
   })()
+  const hasSeriesData = !!spec && spec.series.some((x) => x.data.some((v) => v != null))
 
   const slice: CardData = { ...h, year: year || null, total: h.data[year]?.total ?? null, rows: h.data[year]?.rows ?? [] }
-  const showAllYears = tab === 'chart' && flipped
+  const showAllYears = tab === 'chart' && timeSeries
   const ref = refLabel(h.table, showAllYears ? years : [years.length ? year : null])
   const hasData = !!h.data[year]
   const canDownload = tab === 'chart' && !!spec
   const timeLocked = showAllYears || keys.length < 2
+  const onlyOneYear = keys.length < 2
 
   const play = () => {
     if (playing) return setPlaying(false)
@@ -105,8 +109,8 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
   }
 
   const axisHint = h.kind === 'breakdown'
-    ? (flipped ? 'Years on the x-axis' : 'Components on the x-axis')
-    : (flipped ? (all ? 'Years on the x-axis, stacked by measure' : `Years on the x-axis, one line per ${split}`) : `${split === 'district' ? 'Districts' : 'Talukas'} on the x-axis`)
+    ? (timeSeries ? 'Financial years on the y-axis' : 'Components on the y-axis')
+    : (timeSeries ? (all ? 'Financial years on the x-axis, stacked by measure' : `Financial years on the x-axis, one bar per ${split}`) : `${split === 'district' ? 'Districts' : 'Talukas'} on the x-axis`)
 
   const metricChips = tab === 'chart' && h.kind === 'taluka' && h.columns.length > 1 && (
     <div className="chips" role="tablist" aria-label="Metric">
@@ -138,12 +142,12 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
               </select>
             </label>
           )}
-          <button type="button" className="btn-tool" onClick={play} disabled={timeLocked} title={timeLocked ? 'Needs more than one year, with the year axis not already flipped' : 'Animate across years'}>
+          <button type="button" className="btn-tool" onClick={play} disabled={timeLocked} title={timeLocked ? 'Needs more than one year, with the time series view off' : 'Animate across years'}>
             <Icon d={playing ? ICON.pause : ICON.play} />{playing ? 'Pause' : 'Play'}
           </button>
           {h.kind !== 'kpis' && tab === 'chart' && (
-            <button type="button" className={`btn-tool ${flipped ? 'on' : ''}`} aria-pressed={flipped} onClick={() => { setPlaying(false); setFlipped((f) => !f) }} title="Swap the x-axis between categories and years">
-              <Icon d={ICON.flip} />Show Timeseries
+            <button type="button" className={`btn-tool ${timeSeries ? 'on' : ''}`} aria-pressed={timeSeries} disabled={onlyOneYear} onClick={() => { setPlaying(false); setTimeSeries((f) => !f) }} title={onlyOneYear ? 'Only one financial year is available for this chart' : 'Show this chart across financial years'}>
+              <Icon d={ICON.series} />Show Timeseries
             </button>
           )}
           <button type="button" className="btn-tool" onClick={download} disabled={!canDownload} title={canDownload ? 'Download as PNG' : 'Download is available for charts'}>
@@ -167,13 +171,15 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
               </div>
             ))}
           </dl>
+        ) : spec && !hasSeriesData ? (
+          <Empty>{timeSeries ? 'No time-series data is available for this chart.' : undefined}</Empty>
         ) : spec && (
           <>
             <p className="small muted">
               {h.kind === 'taluka' && !all ? `${col.label}${unitOf(col)} · ` : ''}{axisHint}
             </p>
             <div ref={chartBox} className="modal-chart">
-              <SeriesChart labels={spec.labels} series={spec.series} type={spec.type} stacked={spec.stacked} unit={spec.unit} yMax={flipped ? undefined : spec.yMax} />
+              <SeriesChart labels={spec.labels} series={spec.series} stacked={spec.stacked} horizontal={spec.horizontal} unit={spec.unit} yMax={timeSeries ? undefined : spec.yMax} />
               {!showAllYears && years.length > 0 && <div className="year-stamp" aria-live="polite">{fy(year)}</div>}
             </div>
           </>

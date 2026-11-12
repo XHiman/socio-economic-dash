@@ -14,6 +14,8 @@ export interface CardResult {
   /** Source table, e.g. dsa_11a, for the "DSA table 11a" reference line. */
   table: string;
   stackable: boolean;
+  /** Rendered as a plain card without a full-screen view. */
+  static: boolean;
   year: string | null;
   /** District-level values (the taluka_id IS NULL row for taluka tables). */
   total: Vals | null;
@@ -35,7 +37,7 @@ function pick(raw: Raw, keys: string[]): Vals {
 }
 
 const meta = (card: CardDef): Omit<CardHistory, 'years' | 'data'> => ({
-  id: card.id, title: card.title, kind: card.kind, columns: card.columns, table: card.table, stackable: !!card.stackable,
+  id: card.id, title: card.title, kind: card.kind, columns: card.columns, table: card.table, stackable: !!card.stackable, static: !!card.static,
 });
 
 const startYear = (y: string) => /^\d{4}/.exec(y)?.[0] ?? '';
@@ -57,18 +59,20 @@ export function atYear(h: CardHistory, selected?: string): CardResult {
 
 export async function loadCardHistory(db: Db, catalog: SchemaCatalog, card: CardDef, districtId: number): Promise<CardHistory> {
   const t = catalog.table(card.table)!; // validated at startup
-  const keys = card.columns.map((c) => c.key);
+  // Weight columns are fetched too (to combine rates across districts) but aren't shown unless they are also card columns.
+  const keys = [...new Set(card.columns.flatMap((c) => (c.weightBy ? [c.key, c.weightBy] : [c.key])))];
   const tbl = quoteIdent(card.table);
+  const filter = card.rowFilter ? ` AND ${quoteIdent(card.rowFilter.column)} = ?` : '';
   const data: Record<string, YearData> = {};
   const at = (y: string | null) => (data[y ?? ''] ??= { total: null, rows: [] });
 
   if (card.kind !== 'taluka') {
-    const where = `district_id = ?${t.hasDupFlag ? ' AND is_dup_row = 0' : ''}${t.hasTaluka ? ' AND taluka_id IS NULL' : ''}`;
+    const where = `district_id = ?${t.hasDupFlag ? ' AND is_dup_row = 0' : ''}${t.hasTaluka ? ' AND taluka_id IS NULL' : ''}${filter}`;
     const rows = await query<Raw>(
       db,
       `SELECT ${t.hasYear ? 'reference_year AS _year,' : ''} ${quoteList(keys)} FROM ${tbl} WHERE ${where}
         ORDER BY ${t.hasYear ? 'reference_year,' : ''} id`,
-      [districtId],
+      card.rowFilter ? [districtId, card.rowFilter.value] : [districtId],
     );
     for (const r of rows) at((r._year as string | null) ?? null).total = pick(r, keys); // later id wins
   } else {
@@ -94,10 +98,15 @@ export async function loadCard(db: Db, catalog: SchemaCatalog, card: CardDef, di
   return atYear(await loadCardHistory(db, catalog, card, districtId), year);
 }
 
-/** Combine per-district values for one column: sum for counts, mean for rates/averages. */
-function combine(values: (number | null)[], agg: 'sum' | 'avg' | undefined): number | null {
+/** Combine per-district values for one column: sum for counts; mean for rates/averages, weighted when weights are given. */
+function combine(values: (number | null)[], agg: 'sum' | 'avg' | undefined, weights?: (number | null)[]): number | null {
   const v = values.filter((x): x is number => x !== null);
   if (!v.length) return null;
+  if (agg === 'avg' && weights) {
+    let num = 0, den = 0;
+    values.forEach((x, i) => { const w = weights[i]; if (x !== null && w != null && w > 0) { num += x * w; den += w; } });
+    if (den) return num / den;
+  }
   const sum = v.reduce((a, b) => a + b, 0);
   return agg === 'avg' ? sum / v.length : sum;
 }
@@ -107,8 +116,9 @@ export async function loadStateCardHistory(
   db: Db, catalog: SchemaCatalog, card: CardDef, districts: { id: number; name: string }[],
 ): Promise<CardHistory> {
   const histories = await Promise.all(districts.map((d) => loadCardHistory(db, catalog, card, d.id)));
-  const keys = card.columns.map((c) => c.key);
-  const aggOf = (k: string) => card.columns.find((c) => c.key === k)?.agg;
+  const keys = [...new Set(card.columns.flatMap((c) => (c.weightBy ? [c.key, c.weightBy] : [c.key])))];
+  const colOf = (k: string) => card.columns.find((c) => c.key === k);
+  const aggOf = (k: string) => colOf(k)?.agg;
   const years = [...new Set(histories.flatMap((h) => h.years))].sort();
   const data: Record<string, YearData> = {};
 
@@ -125,7 +135,10 @@ export async function loadStateCardHistory(
     }).filter((d): d is { name: string; values: Vals } => d.values !== null);
 
     if (!perDistrict.length) continue;
-    const total = Object.fromEntries(keys.map((k) => [k, combine(perDistrict.map((d) => d.values[k] ?? null), aggOf(k))]));
+    const total = Object.fromEntries(keys.map((k) => {
+      const w = colOf(k)?.weightBy;
+      return [k, combine(perDistrict.map((d) => d.values[k] ?? null), aggOf(k), w ? perDistrict.map((d) => d.values[w] ?? null) : undefined)];
+    }));
     data[y] = {
       total,
       rows: card.kind !== 'taluka' ? [] : perDistrict.map((d) => ({ taluka: d.name, values: d.values })).sort((a, b) => a.taluka.localeCompare(b.taluka)),

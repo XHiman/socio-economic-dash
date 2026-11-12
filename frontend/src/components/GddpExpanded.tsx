@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useApi } from '../api/client'
 import type { District, SeriesResponse, StateResponse, StateRow } from '../api/types'
-import { PALETTE } from '../lib/chart'
+import { seriesColor } from '../lib/chart'
 import { crore, fy, num, pct } from '../lib/format'
 import { BarChart, LineChart } from './charts'
 import { ChartPanel } from './Modal'
@@ -33,7 +33,7 @@ export function DistrictGddpExpanded({ district, districts, trend }: { district:
         !trend ? <Loading /> : (
           <LineChart
             labels={trend.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
-            series={[{ label: district.name, data: trend.series[0]?.values ?? [], color: PALETTE[1], emphasis: true }]}
+            series={[{ label: district.name, data: trend.series[0]?.values ?? [], color: seriesColor(1), emphasis: true }]}
           />
         )
       ) : compare.error ? <ErrorBox message={compare.error} /> : !compare.data ? <Loading /> : (
@@ -41,7 +41,7 @@ export function DistrictGddpExpanded({ district, districts, trend }: { district:
           labels={compare.data.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
           series={compare.data.series.map((s, i) => ({
             label: peers.find((p) => p.id === s.districtId)?.name ?? String(s.districtId),
-            data: s.values, color: PALETTE[i % PALETTE.length], emphasis: s.districtId === district.id,
+            data: s.values, color: seriesColor(i), emphasis: s.districtId === district.id,
           }))}
         />
       )}
@@ -122,10 +122,10 @@ export function StateGddpExpanded({ state }: { state: StateResponse }) {
       {tab === 'trend' ? (
         <LineChart
           labels={state.trend.map((t) => fy(t.year))} yTitle="GSDP (₹ crore)" format={(v) => crore(v)}
-          series={[{ label: 'Maharashtra', data: state.trend.map((t) => t.gddp), color: PALETTE[1], emphasis: true }]}
+          series={[{ label: 'Maharashtra', data: state.trend.map((t) => t.gddp), color: seriesColor(1), emphasis: true }]}
         />
       ) : tab === 'division' ? (
-        <BarChart horizontal labels={byDivision.map(([d]) => d)} values={byDivision.map(([, v]) => v)} format={crore} unit="₹ crore" color={PALETTE[1]} />
+        <BarChart horizontal labels={byDivision.map(([d]) => d)} values={byDivision.map(([, v]) => v)} format={crore} unit="₹ crore" color={seriesColor(1)} />
       ) : <RankingTable state={state} />}
     </ChartPanel>
   )

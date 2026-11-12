@@ -1,6 +1,6 @@
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { Chart, type ChartOptions, type Plugin } from 'chart.js'
-import { AXIS, GRID, PALETTE, seriesColor } from '../lib/chart'
+import { AXIS, GRID, seriesColor } from '../lib/chart'
 import { compact, num } from '../lib/format'
 
 export interface LineSeries { label: string; data: (number | null)[]; color?: string; emphasis?: boolean }
@@ -34,7 +34,7 @@ export function LineChart({ labels, series, yTitle, format = (v) => num(v, 2) }:
       data={{
         labels,
         datasets: series.map((s, i) => {
-          const color = s.color ?? PALETTE[i % PALETTE.length]
+          const color = s.color ?? seriesColor(i)
           return {
             label: s.label,
             data: s.data,
@@ -51,7 +51,7 @@ export function LineChart({ labels, series, yTitle, format = (v) => num(v, 2) }:
   )
 }
 
-export function BarChart({ labels, values, color = PALETTE[0], horizontal = false, format = (v) => num(v, 2), unit }: {
+export function BarChart({ labels, values, color = seriesColor(0), horizontal = false, format = (v) => num(v, 2), unit }: {
   labels: string[]
   values: (number | null)[]
   color?: string
@@ -128,7 +128,7 @@ export function DoughnutChart({ labels, values, colors, callouts = false, names 
   const options: ChartOptions<'doughnut'> = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: callouts ? '45%' : '58%',
+    cutout: '55%', // same with or without callouts so the expanded view only adds the labels
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -152,30 +152,37 @@ export function DoughnutChart({ labels, values, colors, callouts = false, names 
 
 export interface Series { label: string; data: (number | null)[] }
 
-/** Multi-series bar/line chart for the expanded card view: optional stacking, animation and a pinned value axis. */
-export function SeriesChart({ labels, series, type, stacked = false, unit, yMax, yTitle }: {
+/**
+ * Multi-series bar/line chart for the expanded card view: stacking, horizontal bars, animation and a
+ * pinned value axis. The category axis (talukas, components or financial years) is `x`, or `y` when horizontal.
+ */
+export function SeriesChart({ labels, series, type = 'bar', stacked = false, horizontal = false, unit, yMax, yTitle }: {
   labels: string[]
   series: Series[]
-  type: 'bar' | 'line'
+  type?: 'bar' | 'line'
   stacked?: boolean
+  horizontal?: boolean
   unit?: string
   yMax?: number
   yTitle?: string
 }) {
-  const tick = { callback: (v: string | number) => compact(Number(v)) }
-  const common = {
+  const value = horizontal ? 'x' : 'y'
+  const category = horizontal ? 'y' : 'x'
+  const options = {
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 500 },
-    interaction: { mode: 'index' as const, intersect: false },
+    indexAxis: category,
+    interaction: { mode: 'index', intersect: false, axis: category },
     plugins: {
-      legend: { display: series.length > 1, position: 'bottom' as const, labels: { usePointStyle: true, boxWidth: 8 } },
-      tooltip: { callbacks: { label: (c: { dataset: { label?: string }; parsed: { y: number | null } }) => `${c.dataset.label}: ${num(c.parsed.y)}${unit ? ` ${unit}` : ''}` } },
+      legend: { display: series.length > 1, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+      tooltip: { callbacks: { label: (c: { dataset: { label?: string }; parsed: Record<string, number | null> }) => `${c.dataset.label}: ${num(c.parsed[value])}${unit ? ` ${unit}` : ''}` } },
     },
     scales: {
-      x: { stacked, grid: { display: false } },
-      y: {
-        stacked, grid: { color: GRID }, ticks: tick, beginAtZero: true,
+      [category]: { stacked, grid: { display: false } },
+      [value]: {
+        stacked, grid: { color: GRID }, beginAtZero: true,
+        ticks: { callback: (v: string | number) => compact(Number(v)) },
         ...(yMax ? { max: yMax } : {}),
         title: { display: !!(yTitle ?? unit), text: yTitle ?? unit ?? '' },
       },
@@ -184,7 +191,7 @@ export function SeriesChart({ labels, series, type, stacked = false, unit, yMax,
   if (type === 'line') {
     return (
       <Line
-        options={common}
+        options={options as unknown as ChartOptions<'line'>}
         data={{
           labels,
           datasets: series.map((s, i) => ({
@@ -197,7 +204,7 @@ export function SeriesChart({ labels, series, type, stacked = false, unit, yMax,
   }
   return (
     <Bar
-      options={common}
+      options={options as unknown as ChartOptions<'bar'>}
       data={{
         labels,
         datasets: series.map((s, i) => ({

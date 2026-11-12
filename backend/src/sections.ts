@@ -11,7 +11,7 @@ import type { SchemaCatalog } from './schema.js';
 
 export type CardKind = 'kpis' | 'breakdown' | 'taluka';
 /** How a column combines across districts for the state view. Counts/areas sum; rates and averages are averaged. */
-export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; /** This column is the sum of its siblings; left out of stacked views. */ total?: boolean }
+export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; /** This column is the sum of its siblings; left out of stacked views. */ total?: boolean; /** Averaged across districts weighted by this column of the same table (e.g. population). */ weightBy?: string }
 export interface CardDef {
   id: string;
   title: string;
@@ -20,6 +20,10 @@ export interface CardDef {
   columns: CardColumn[];
   /** Columns are additive parts of one whole, so an "All" stacked view makes sense. */
   stackable?: boolean;
+  /** Only read rows where this column equals this value (tables that hold several rows per district and year). */
+  rowFilter?: { column: string; value: string };
+  /** Shown as a plain card: no full-screen view. */
+  static?: boolean;
 }
 export interface SectionDef { id: string; title: string; description: string; cards: CardDef[] }
 
@@ -29,22 +33,30 @@ const c = (key: string, label: string, unit?: string, total = false): CardColumn
   ...(unit === '%' || AVG_KEYS.has(key) ? { agg: 'avg' as const } : {}),
 });
 
+/** dsa_11a has one row per district for each census year plus these two; the card shows the reference-year row. */
+const REF_ROW = { column: 'reporting_year', value: 'Reference year' };
+const POP = 'area_pop_net_pop';
+/** Rates weighted by population when combined across districts (a plain mean would overstate small districts). */
+const byPop = (col: CardColumn): CardColumn => ({ ...col, weightBy: POP });
+
 export const SECTIONS: SectionDef[] = [
   {
     id: 'people',
     title: 'People & Society',
     description: 'Population, literacy, workers and local governance.',
     cards: [
-      { id: 'profile', title: 'District profile', table: 'dsa_11a', kind: 'kpis', columns: [
-        c('area_pop_net_area', 'Net area'), c('area_pop_net_pop', 'Net population'),
-        c('area_pop_prop_urban', 'Urban population', '%'), c('area_pop_prop_rural', 'Rural population', '%'),
-        c('area_pop_gen_ratio', 'Sex ratio', 'females per 1,000 males'),
+      { id: 'profile', title: 'District profile', table: 'dsa_11a', kind: 'kpis', static: true, rowFilter: REF_ROW, columns: [
+        c('area_pop_net_area', 'Net area'), c(POP, 'Net population'),
+        c('area_pop_tot_taluka', 'Talukas'), c('area_pop_vill_pop', 'Inhabited villages'),
+        c('area_pop_vill_non_pop', 'Uninhabited villages'), c('area_pop_city', 'Towns & cities'),
+        byPop(c('area_pop_prop_urban', 'Urban population', '%')), byPop(c('area_pop_prop_rural', 'Rural population', '%')),
+        byPop(c('area_pop_gen_ratio', 'Sex ratio', 'females per 1,000 males')), byPop(c('lit_tot', 'Literacy rate', '%')),
       ] },
-      { id: 'literacy', title: 'Literacy rate', table: 'dsa_11a', kind: 'breakdown', columns: [
-        c('lit_male', 'Male', '%'), c('lit_female', 'Female', '%'), c('lit_rural', 'Rural', '%'),
-        c('lit_urban', 'Urban', '%'), c('lit_sc_castes', 'Scheduled Castes', '%'), c('lit_sc_tribes', 'Scheduled Tribes', '%'),
+      { id: 'literacy', title: 'Literacy rate', table: 'dsa_11a', kind: 'breakdown', rowFilter: REF_ROW, columns: [
+        byPop(c('lit_male', 'Male', '%')), byPop(c('lit_female', 'Female', '%')), byPop(c('lit_rural', 'Rural', '%')),
+        byPop(c('lit_urban', 'Urban', '%')), byPop(c('lit_sc_castes', 'Scheduled Castes', '%')), byPop(c('lit_sc_tribes', 'Scheduled Tribes', '%')),
       ] },
-      { id: 'local-gov', title: 'Local self-government bodies', table: 'dsa_11a', kind: 'breakdown', columns: [
+      { id: 'local-gov', title: 'Local self-government bodies', table: 'dsa_11a', kind: 'breakdown', rowFilter: REF_ROW, columns: [
         c('loc_gov_mun_corp', 'Municipal corporations'), c('loc_gov_mun_coun', 'Municipal councils'),
         c('loc_gov_nag_panch', 'Nagar panchayats'), c('loc_gov_cutt_board', 'Cantonment boards'),
         c('loc_gov_punch_sam', 'Panchayat samitis'), c('loc_gov_gram_punch', 'Gram panchayats'),
@@ -140,7 +152,15 @@ export function validateSections(catalog: SchemaCatalog, warn: (msg: string) => 
         if (!ok) warn(`card ${card.id}: column ${card.table}.${col.key} missing/non-numeric`);
         return ok;
       });
-      if (cols.length) cards.push({ ...card, columns: cols });
+      let rowFilter = card.rowFilter;
+      if (rowFilter && !t.columns.has(rowFilter.column)) { warn(`card ${card.id}: rowFilter column ${card.table}.${rowFilter.column} missing, ignored`); rowFilter = undefined; }
+      const withWeights = cols.map((col) => {
+        if (!col.weightBy || t.columns.get(col.weightBy)?.numeric) return col;
+        warn(`card ${card.id}: weight column ${card.table}.${col.weightBy} missing, ${col.key} is averaged unweighted`);
+        const { weightBy: _dropped, ...rest } = col;
+        return rest;
+      });
+      if (withWeights.length) cards.push({ ...card, columns: withWeights, rowFilter });
     }
     if (cards.length) out.push({ ...s, cards });
   }

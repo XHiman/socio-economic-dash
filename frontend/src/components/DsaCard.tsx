@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import type { CardData } from '../api/types'
-import { PALETTE } from '../lib/chart'
+import { seriesColor } from '../lib/chart'
 import { fy, num } from '../lib/format'
 import { sameYear } from '../lib/years'
 import { CardModal } from './CardModal'
 import { Icon, ICON } from './Modal'
-import { CardTable, refLabel, stackParts, unitOf, type Split } from './CardTable'
+import { ProfileCard } from './ProfileCard'
+import { CardTable, stackParts, unitOf, type Split } from './CardTable'
 import { BarChart, SeriesChart } from './charts'
 import { Empty } from './ui'
 
-function Body({ card, split }: { card: CardData; split: Split }) {
+/** The card's chart or figures; also used by static (non-expandable) cards. */
+export function CardBody({ card, split }: { card: CardData; split: Split }) {
   const [active, setActive] = useState(card.kind === 'taluka' && stackParts(card).length > 1 ? -1 : 0) // -1 = All (stacked)
 
   if (card.kind === 'kpis') {
@@ -39,7 +41,7 @@ function Body({ card, split }: { card: CardData; split: Split }) {
             labels={card.columns.map((c) => c.label)}
             values={card.columns.map((c) => card.total![c.key] ?? null)}
             unit={shared}
-            color={PALETTE[0]}
+            color={seriesColor(0)}
           />
         </div>
         <div className="table-wrap">
@@ -96,7 +98,7 @@ function Body({ card, split }: { card: CardData; split: Split }) {
             labels={labels}
             values={card.rows.map((r) => r.values[col.key] ?? null)}
             unit={col.unit}
-            color={PALETTE[active % PALETTE.length]}
+            color={seriesColor(Math.max(active, 0))}
           />
         )}
       </div>
@@ -116,14 +118,15 @@ export function DsaCard({ card, split = 'taluka', historyPath, selectedYear }: {
         <h3>{card.title}</h3>
         <div className="card-actions">
           {offYear && <span className="badge warn" title="No data for the selected year; showing the nearest earlier year">Data: {fy(card.year)}</span>}
-          <button type="button" className="icon-btn" onClick={() => setOpen(true)} aria-label={`View ${card.title} full screen`} title="Full screen">
-            <Icon d={ICON.expand} />
-          </button>
+          {!card.static && (
+            <button type="button" className="icon-btn" onClick={() => setOpen(true)} aria-label={`View ${card.title} full screen`} title="Full screen">
+              <Icon d={ICON.expand} />
+            </button>
+          )}
         </div>
       </header>
-      <Body card={card} split={split} />
-      <p className="card-ref small muted">{refLabel(card.table, [])}</p>
-      {open && <CardModal card={card} split={split} historyPath={historyPath} selectedYear={selectedYear} onClose={() => setOpen(false)} />}
+      {card.static ? <ProfileCard card={card} /> : <CardBody card={card} split={split} />}
+      {open && !card.static && <CardModal card={card} split={split} historyPath={historyPath} selectedYear={selectedYear} onClose={() => setOpen(false)} />}
     </section>
   )
 }

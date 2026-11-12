@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { exportPng, type LegendItem } from '../lib/download'
+import { DATA_DISCLAIMER } from '../config'
 import { dash } from '../lib/format'
 import { Icon, ICON, Modal } from './Modal'
 
@@ -74,5 +75,18 @@ export function ChartCard({ title, subtitle, children, height = 320, className =
       {open && expanded && <Modal title={title} onClose={() => setOpen(false)}>{expanded()}</Modal>}
       <div ref={body} className="chart-body" style={{ height }}>{children}</div>
     </section>
+  )
+}
+
+/** Data-coverage notice; the text lives in config.ts. */
+export function DataDisclaimer() {
+  if (!DATA_DISCLAIMER) return null
+  return (
+    <p className="disclaimer" role="note">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+      <span>{DATA_DISCLAIMER}</span>
+    </p>
   )
 }

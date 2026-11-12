@@ -4,6 +4,7 @@ import { exportPng, type LegendItem } from '../lib/download'
 export const ICON = {
   play: 'M6 4l14 8-14 8z',
   pause: 'M7 4h3v16H7zM14 4h3v16h-3z',
+  series: 'M3 3v18h18M7 15l4-4 4 3 5-7',
   flip: 'M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   close: 'M18 6L6 18M6 6l12 12',

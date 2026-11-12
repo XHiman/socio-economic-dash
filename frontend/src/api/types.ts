@@ -46,6 +46,8 @@ export interface CardData {
   table: string;
   /** Columns are additive parts of a whole (enables the stacked "All" view). */
   stackable: boolean;
+  /** Plain card: no full-screen view. */
+  static?: boolean;
   year: string | null;
   total: Record<string, number | null> | null;
   rows: { taluka: string; values: Record<string, number | null> }[];
