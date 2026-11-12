@@ -10,17 +10,24 @@
 import type { SchemaCatalog } from './schema.js';
 
 export type CardKind = 'kpis' | 'breakdown' | 'taluka';
-export interface CardColumn { key: string; label: string; unit?: string }
+/** How a column combines across districts for the state view. Counts/areas sum; rates and averages are averaged. */
+export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; /** This column is the sum of its siblings; left out of stacked views. */ total?: boolean }
 export interface CardDef {
   id: string;
   title: string;
   table: string;
   kind: CardKind;
   columns: CardColumn[];
+  /** Columns are additive parts of one whole, so an "All" stacked view makes sense. */
+  stackable?: boolean;
 }
 export interface SectionDef { id: string; title: string; description: string; cards: CardDef[] }
 
-const c = (key: string, label: string, unit?: string): CardColumn => ({ key, label, ...(unit ? { unit } : {}) });
+const AVG_KEYS = new Set(['avg_rainfall', 'ref_year_avg_rainfall', 'rainfall_day_cnt', 'area_pop_gen_ratio']);
+const c = (key: string, label: string, unit?: string, total = false): CardColumn => ({
+  key, label, ...(unit ? { unit } : {}), ...(total ? { total } : {}),
+  ...(unit === '%' || AVG_KEYS.has(key) ? { agg: 'avg' as const } : {}),
+});
 
 export const SECTIONS: SectionDef[] = [
   {
@@ -45,8 +52,8 @@ export const SECTIONS: SectionDef[] = [
       { id: 'literacy-taluka', title: 'Literacy by taluka', table: 'dsa_87', kind: 'taluka', columns: [
         c('tot_lite_perce', 'Total', '%'), c('tot_lite_perce_man', 'Male', '%'), c('tot_lite_perce_womman', 'Female', '%'),
       ] },
-      { id: 'workers', title: 'Workers by taluka', table: 'dsa_115', kind: 'taluka', columns: [
-        c('mainperf_total', 'Main workers'), c('marginalworker', 'Marginal workers'), c('tot_main_marginalwor', 'Total workers'),
+      { id: 'workers', title: 'Workers by taluka', table: 'dsa_115', stackable: true, kind: 'taluka', columns: [
+        c('mainperf_total', 'Main workers'), c('marginalworker', 'Marginal workers'), c('tot_main_marginalwor', 'Total workers', undefined, true),
       ] },
     ],
   },
@@ -68,7 +75,7 @@ export const SECTIONS: SectionDef[] = [
     title: 'Agriculture & Land',
     description: 'Land use, rainfall and livestock.',
     cards: [
-      { id: 'land-use', title: 'Land use', table: 'dsa_51', kind: 'breakdown', columns: [
+      { id: 'land-use', title: 'Land use', table: 'dsa_51', stackable: true, kind: 'breakdown', columns: [
         c('net_area', 'Net sown area'), c('tot_fall_land', 'Fallow land'), c('fallen_uncaltivated_land', 'Uncultivated land'),
         c('for_cov_area', 'Forest cover'), c('land_non_agri', 'Non-agricultural use'),
       ] },
@@ -76,7 +83,7 @@ export const SECTIONS: SectionDef[] = [
         c('avg_rainfall', 'Normal average rainfall'), c('ref_year_avg_rainfall', 'Reference-year rainfall'),
         c('rainfall_day_cnt', 'Normal rainy days'),
       ] },
-      { id: 'livestock', title: 'Livestock', table: 'dsa_118c', kind: 'breakdown', columns: [
+      { id: 'livestock', title: 'Livestock', table: 'dsa_118c', stackable: true, kind: 'breakdown', columns: [
         c('cow_and_bull', 'Cattle'), c('buff_and_redd', 'Buffaloes'), c('sheep', 'Sheep'), c('goat', 'Goats'),
         c('horse_colt_mule', 'Horses & mules'), c('donkey', 'Donkeys'), c('other_livestock', 'Other'),
       ] },
@@ -87,11 +94,11 @@ export const SECTIONS: SectionDef[] = [
     title: 'Infrastructure',
     description: 'Electricity and roads.',
     cards: [
-      { id: 'electricity', title: 'Electricity consumption by taluka', table: 'dsa_71', kind: 'taluka', columns: [
-        c('tot_elecons_total', 'Total'), c('tot_elecconsu_home', 'Domestic'), c('tot_elecons_industrial', 'Industrial'),
+      { id: 'electricity', title: 'Electricity consumption by taluka', table: 'dsa_71', stackable: true, kind: 'taluka', columns: [
+        c('tot_elecons_total', 'Total', undefined, true), c('tot_elecconsu_home', 'Domestic'), c('tot_elecons_industrial', 'Industrial'),
         c('tot_elecons_agri', 'Agricultural'), c('tot_elecons_commwork', 'Commercial'),
       ] },
-      { id: 'roads', title: 'Road network', table: 'dsa_78', kind: 'breakdown', columns: [
+      { id: 'roads', title: 'Road network', table: 'dsa_78', stackable: true, kind: 'breakdown', columns: [
         c('nationalhi_road', 'National highways', 'km'), c('lengroad_statehighway', 'State highways', 'km'),
         c('lengroad_majordisroad', 'Major district roads', 'km'), c('lengroad_otherdisroad', 'Other district roads', 'km'),
         c('lengroad_ruraldisroad', 'Rural roads', 'km'),
@@ -103,7 +110,7 @@ export const SECTIONS: SectionDef[] = [
     title: 'Education & Health',
     description: 'Schools, health facilities and vital statistics.',
     cards: [
-      { id: 'schools', title: 'Schools by management', table: 'dsa_81', kind: 'breakdown', columns: [
+      { id: 'schools', title: 'Schools by management', table: 'dsa_81', stackable: true, kind: 'breakdown', columns: [
         c('tot_gov_sch', 'Government'), c('tot_local_sch', 'Local body'), c('tot_priv_sch', 'Private aided'),
         c('tot_priv_non_sch', 'Private unaided'),
       ] },
@@ -138,4 +145,20 @@ export function validateSections(catalog: SchemaCatalog, warn: (msg: string) => 
     if (cards.length) out.push({ ...s, cards });
   }
   return out;
+}
+
+/**
+ * Units live in the database (dim_unit: table_name, column_name, unit) so they can be maintained
+ * without a deploy. A column's unit is taken from there when present, else from the defaults above.
+ * The table is optional: if it doesn't exist yet nothing changes.
+ */
+export function applyUnits(sections: SectionDef[], units: Map<string, string>): void {
+  for (const s of sections) {
+    for (const card of s.cards) {
+      for (const col of card.columns) {
+        const u = units.get(`${card.table}.${col.key}`);
+        if (u) col.unit = u;
+      }
+    }
+  }
 }

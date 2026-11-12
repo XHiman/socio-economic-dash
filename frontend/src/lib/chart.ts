@@ -6,6 +6,8 @@ Chart.register(ArcElement, BarElement, CategoryScale, Filler, Legend, LinearScal
 
 /** Categorical palette (colour-blind safe ordering, matches the previous dashboard's brand colours). */
 export const PALETTE = ['#1E3A8A', '#0D9488', '#F59E0B', '#7C3AED', '#DB2777', '#0EA5E9', '#65A30D', '#64748B']
+/** PALETTE first, then generated hues so charts with many series (one per taluka) stay distinguishable. */
+export const seriesColor = (i: number) => (i < PALETTE.length ? PALETTE[i]! : `hsl(${(i * 47) % 360} 55% 45%)`)
 export const SECTOR_COLORS = ['#0D9488', '#1E3A8A', '#F59E0B']
 
 export const AXIS = '#64748B'

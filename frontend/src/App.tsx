@@ -2,9 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { Loading } from './components/ui'
 
-const StatePage = lazy(() => import('./pages/StatePage'))
-const DistrictPage = lazy(() => import('./pages/DistrictPage'))
-const DistrictIndex = lazy(() => import('./pages/DistrictIndex'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ExplorerPage = lazy(() => import('./pages/ExplorerPage'))
 
 function Shell() {
@@ -22,8 +20,7 @@ function Shell() {
             </div>
           </div>
           <nav aria-label="Primary">
-            <NavLink to="/" end>State</NavLink>
-            <NavLink to="/district">Districts</NavLink>
+            <NavLink to="/" end>Dashboard</NavLink>
             <NavLink to="/explore">Data explorer</NavLink>
           </nav>
         </div>
@@ -31,9 +28,8 @@ function Shell() {
       <main id="main" className="wrap">
         <Suspense fallback={<Loading />}>
           <Routes>
-            <Route path="/" element={<StatePage />} />
-            <Route path="/district" element={<DistrictIndex />} />
-            <Route path="/district/:id" element={<DistrictPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/dashboard/:id" element={<DashboardPage />} />
             <Route path="/explore" element={<ExplorerPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

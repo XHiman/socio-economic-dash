@@ -1,0 +1,196 @@
+import { useEffect, useRef, useState } from 'react'
+import type { CardColumn, CardData, CardHistory } from '../api/types'
+import { useApi } from '../api/client'
+import { exportPng } from '../lib/download'
+import { fy, num } from '../lib/format'
+import { resolveYearIndex } from '../lib/years'
+import { CardTable, refLabel, stackParts, unitOf, type Split } from './CardTable'
+import { SeriesChart, type Series } from './charts'
+import { Icon, ICON, Modal } from './Modal'
+import { Empty, ErrorBox, Loading } from './ui'
+
+const clean = (name: string) => name.replace(/ \(synthetic\)$/, '')
+const sharedUnit = (cols: CardColumn[]) => {
+  const u = new Set(cols.map((c) => c.unit ?? ''))
+  return u.size === 1 ? [...u][0] || undefined : undefined
+}
+
+interface Spec { type: 'bar' | 'line'; labels: string[]; series: Series[]; stacked: boolean; unit?: string; yMax?: number }
+
+function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; selectedYear: string | null }) {
+  const { years } = h
+  const keys = years.length ? years : [''] // tables without a year column keep one '' entry
+  const [pickedIdx, setPickedIdx] = useState<number | null>(null)
+  const initial = years.length ? Math.max(resolveYearIndex(years, selectedYear), 0) : 0
+  const idx = Math.min(pickedIdx ?? initial, keys.length - 1)
+  const year = keys[idx]!
+  const [tab, setTab] = useState<'chart' | 'table'>('chart')
+  const [flipped, setFlipped] = useState(false)
+  const [metric, setMetric] = useState(h.kind === 'taluka' && stackParts(h).length > 1 ? -1 : 0) // -1 = "All" (stacked)
+  const [playing, setPlaying] = useState(false)
+  const chartBox = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!playing) return
+    const t = setTimeout(() => {
+      if (idx < keys.length - 1) setPickedIdx(idx + 1)
+      else setPlaying(false)
+    }, 1100)
+    return () => clearTimeout(t)
+  }, [playing, idx, keys.length])
+
+  const parts = stackParts(h)
+  const canAll = h.kind === 'taluka' && parts.length > 1
+  const all = canAll && metric === -1
+  const col = h.columns[Math.max(metric, 0)] ?? h.columns[0]!
+  const labelFor = (cols: CardColumn[]) => (c: CardColumn) => (sharedUnit(cols) || !c.unit ? c.label : `${c.label} (${c.unit})`)
+
+  const totalOf = (y: string, key: string) => {
+    const d = h.data[y]
+    if (d?.total?.[key] != null) return d.total[key]!
+    const v = (d?.rows ?? []).map((r) => r.values[key]).filter((x): x is number => x != null)
+    return v.length ? v.reduce((a, b) => a + b, 0) : null
+  }
+  const yearLabels = years.length ? years.map(fy) : ['Latest']
+
+  const spec = ((): Spec | null => {
+    if (h.kind === 'kpis') return null
+    if (h.kind === 'breakdown') {
+      const lab = labelFor(h.columns)
+      const val = (y: string, c: CardColumn) => h.data[y]?.total?.[c.key] ?? null
+      if (!flipped) {
+        const yMax = Math.max(0, ...keys.flatMap((y) => h.columns.map((c) => val(y, c) ?? 0)))
+        return { type: 'bar', stacked: false, unit: sharedUnit(h.columns), yMax, labels: h.columns.map(lab), series: [{ label: h.title, data: h.columns.map((c) => val(year, c)) }] }
+      }
+      const cols = h.stackable ? parts : h.columns
+      return { type: h.stackable ? 'bar' : 'line', stacked: h.stackable, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => val(y, c)) })) }
+    }
+    // taluka / district split
+    const cols = all ? parts : [col]
+    const lab = labelFor(cols)
+    if (!flipped) {
+      const rowSum = (r: CardData['rows'][number]) => cols.reduce((a, c) => a + (r.values[c.key] ?? 0), 0)
+      const yMax = Math.max(0, ...keys.flatMap((y) => (h.data[y]?.rows ?? []).map((r) => (all ? rowSum(r) : r.values[col.key] ?? 0))))
+      const rows = h.data[year]?.rows ?? []
+      return {
+        type: 'bar', stacked: all, unit: sharedUnit(cols), yMax, labels: rows.map((r) => clean(r.taluka)),
+        series: cols.map((c) => ({ label: lab(c), data: rows.map((r) => r.values[c.key] ?? null) })),
+      }
+    }
+    if (all) {
+      return { type: 'bar', stacked: true, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => totalOf(y, c.key)) })) }
+    }
+    const names = [...new Set(keys.flatMap((y) => (h.data[y]?.rows ?? []).map((r) => r.taluka)))].sort()
+    return {
+      type: 'line', stacked: false, unit: col.unit, labels: yearLabels,
+      series: names.map((n) => ({ label: clean(n), data: keys.map((y) => h.data[y]?.rows.find((r) => r.taluka === n)?.values[col.key] ?? null) })),
+    }
+  })()
+
+  const slice: CardData = { ...h, year: year || null, total: h.data[year]?.total ?? null, rows: h.data[year]?.rows ?? [] }
+  const showAllYears = tab === 'chart' && flipped
+  const ref = refLabel(h.table, showAllYears ? years : [years.length ? year : null])
+  const hasData = !!h.data[year]
+  const canDownload = tab === 'chart' && !!spec
+  const timeLocked = showAllYears || keys.length < 2
+
+  const play = () => {
+    if (playing) return setPlaying(false)
+    if (idx >= keys.length - 1) setPickedIdx(0)
+    setPlaying(true)
+  }
+  const download = () => {
+    const stamp = showAllYears ? '' : years.length ? ` - ${fy(year)}` : ''
+    void exportPng([...(chartBox.current?.querySelectorAll('canvas') ?? [])], { title: `${h.title}${stamp}`, reference: ref })
+  }
+
+  const axisHint = h.kind === 'breakdown'
+    ? (flipped ? 'Years on the x-axis' : 'Components on the x-axis')
+    : (flipped ? (all ? 'Years on the x-axis, stacked by measure' : `Years on the x-axis, one line per ${split}`) : `${split === 'district' ? 'Districts' : 'Talukas'} on the x-axis`)
+
+  const metricChips = tab === 'chart' && h.kind === 'taluka' && h.columns.length > 1 && (
+    <div className="chips" role="tablist" aria-label="Metric">
+      {h.columns.map((c, i) => (canAll && c.total ? null : (
+        <button key={c.key} type="button" role="tab" aria-selected={i === metric} className={`chip ${i === metric ? 'on' : ''}`} onClick={() => setMetric(i)}>{c.label}</button>
+      )))}
+      {canAll && (
+        <button type="button" role="tab" aria-selected={all} className={`chip ${all ? 'on' : ''}`} onClick={() => setMetric(-1)}>All (stacked)</button>
+      )}
+    </div>
+  )
+
+  return (
+    <>
+      <div className="modal-bar">
+        <div className="tabs" role="tablist" aria-label="View">
+          {(['chart', 'table'] as const).map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
+              {t === 'chart' ? (h.kind === 'kpis' ? 'Overview' : 'Chart') : 'Data table'}
+            </button>
+          ))}
+        </div>
+        <div className="modal-tools">
+          {years.length > 0 && (
+            <label>
+              <span>Year</span>
+              <select value={idx} disabled={showAllYears} onChange={(e) => { setPlaying(false); setPickedIdx(Number(e.target.value)) }}>
+                {years.map((y, i) => <option key={y} value={i}>{fy(y)}</option>)}
+              </select>
+            </label>
+          )}
+          <button type="button" className="btn-tool" onClick={play} disabled={timeLocked} title={timeLocked ? 'Needs more than one year, with the year axis not already flipped' : 'Animate across years'}>
+            <Icon d={playing ? ICON.pause : ICON.play} />{playing ? 'Pause' : 'Play'}
+          </button>
+          {h.kind !== 'kpis' && tab === 'chart' && (
+            <button type="button" className={`btn-tool ${flipped ? 'on' : ''}`} aria-pressed={flipped} onClick={() => { setPlaying(false); setFlipped((f) => !f) }} title="Swap the x-axis between categories and years">
+              <Icon d={ICON.flip} />Show Timeseries
+            </button>
+          )}
+          <button type="button" className="btn-tool" onClick={download} disabled={!canDownload} title={canDownload ? 'Download as PNG' : 'Download is available for charts'}>
+            <Icon d={ICON.download} />Download
+          </button>
+        </div>
+      </div>
+
+      {metricChips}
+
+      <div className="modal-body">
+        {!hasData ? <Empty /> : tab === 'table' ? (
+          <CardTable card={slice} split={split} />
+        ) : h.kind === 'kpis' ? (
+          <dl className="stat-grid big">
+            {h.columns.map((c) => (
+              <div key={c.key} className="stat">
+                <dt>{c.label}</dt>
+                <dd>{num(slice.total?.[c.key])}</dd>
+                {c.unit && <div className="unit-line">{c.unit}</div>}
+              </div>
+            ))}
+          </dl>
+        ) : spec && (
+          <>
+            <p className="small muted">
+              {h.kind === 'taluka' && !all ? `${col.label}${unitOf(col)} · ` : ''}{axisHint}
+            </p>
+            <div ref={chartBox} className="modal-chart">
+              <SeriesChart labels={spec.labels} series={spec.series} type={spec.type} stacked={spec.stacked} unit={spec.unit} yMax={flipped ? undefined : spec.yMax} />
+              {!showAllYears && years.length > 0 && <div className="year-stamp" aria-live="polite">{fy(year)}</div>}
+            </div>
+          </>
+        )}
+      </div>
+      <footer className="modal-foot muted small">{ref}</footer>
+    </>
+  )
+}
+
+export function CardModal({ card, split, historyPath, selectedYear, onClose }: {
+  card: CardData; split: Split; historyPath: string; selectedYear: string | null; onClose: () => void
+}) {
+  const hist = useApi<CardHistory>(historyPath)
+  return (
+    <Modal title={card.title} subtitle={refLabel(card.table, [])} onClose={onClose}>
+      {hist.error ? <ErrorBox message={hist.error} /> : !hist.data ? <Loading /> : <Viewer h={hist.data} split={split} selectedYear={selectedYear} />}
+    </Modal>
+  )
+}

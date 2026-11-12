@@ -1,36 +1,61 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useApi } from '../api/client'
-import type { District, Meta, OverviewResponse, SectionResponse, SectionSummary, SectorMixResponse, SeriesResponse } from '../api/types'
+import type { District, Meta, OverviewResponse, SectionResponse, SectionSummary, SectorMixResponse, SeriesResponse, StateResponse, StateRow } from '../api/types'
 import { DoughnutChart, LineChart } from '../components/charts'
 import { DsaCard } from '../components/DsaCard'
+import { DistrictGddpExpanded, StateGddpExpanded } from '../components/GddpExpanded'
+import { ChartPanel, ICON, Icon } from '../components/Modal'
 import { ChartCard, Empty, ErrorBox, Kpi, Loading } from '../components/ui'
 import { PALETTE, SECTOR_COLORS } from '../lib/chart'
 import { crore, fy, inr, num, pct } from '../lib/format'
+import { sameYear } from '../lib/years'
 
 const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
-function SectorCharts({ mix, districtName }: { mix: SectorMixResponse; districtName: string }) {
-  const labels = ['Primary', 'Secondary', 'Tertiary']
+const SECTOR_LABELS = ['Primary', 'Secondary', 'Tertiary']
+const SECTOR_LEGEND = SECTOR_LABELS.map((label, i) => ({ label, color: SECTOR_COLORS[i]! }))
+
+function SectorCharts({ mix, districtName, callouts, names = false }: { mix: SectorMixResponse; districtName: string | null; callouts: boolean; names?: boolean }) {
   const vals = (m: SectorMixResponse['district']) => [m?.primary ?? null, m?.secondary ?? null, m?.tertiary ?? null]
   return (
     <>
       <div className="doughnuts">
-        <figure><div className="pie"><DoughnutChart labels={labels} values={vals(mix.state)} colors={SECTOR_COLORS} /></div><figcaption>Maharashtra</figcaption></figure>
-        <figure><div className="pie"><DoughnutChart labels={labels} values={vals(mix.district)} colors={SECTOR_COLORS} /></div><figcaption>{districtName}</figcaption></figure>
+        <figure><div className="pie"><DoughnutChart labels={SECTOR_LABELS} values={vals(mix.state)} colors={SECTOR_COLORS} callouts={callouts} names={names} /></div><figcaption>Maharashtra</figcaption></figure>
+        {districtName && <figure><div className="pie"><DoughnutChart labels={SECTOR_LABELS} values={vals(mix.district)} colors={SECTOR_COLORS} callouts={callouts} names={names} /></div><figcaption>{districtName}</figcaption></figure>}
       </div>
       <ul className="legend" aria-label="Sector legend">
-        {labels.map((l, i) => <li key={l}><span style={{ background: SECTOR_COLORS[i] }} />{l}</li>)}
+        {SECTOR_LABELS.map((l, i) => <li key={l}><span style={{ background: SECTOR_COLORS[i] }} />{l}</li>)}
       </ul>
     </>
   )
 }
 
-function DsaSections({ districtId }: { districtId: number }) {
+/** Full-screen sector share, with the on-ring percentage callouts switchable. */
+function SectorExpanded({ mix, districtName, year }: { mix: SectorMixResponse; districtName: string | null; year: string | null }) {
+  const [callouts, setCallouts] = useState(true)
+  return (
+    <ChartPanel
+      title={`Sector share – ${fy(year)}`} reference="District Domestic Product estimates (dsa_gddp), share of GVA (%)" legend={SECTOR_LEGEND}
+      tabs={<span className="muted small">Share of GVA by sector (%)</span>}
+      tools={
+        <button type="button" className={`btn-tool ${callouts ? 'on' : ''}`} aria-pressed={callouts} onClick={() => setCallouts((c) => !c)} title="Show or hide the percentage callouts">
+          <Icon d={ICON.flip} />Callouts
+        </button>
+      }
+    >
+      <SectorCharts mix={mix} districtName={districtName} callouts={callouts} names={callouts} />
+    </ChartPanel>
+  )
+}
+
+/** districtId null = whole state: cards aggregate all districts and are split by district. */
+function DsaSections({ districtId, year }: { districtId: number | null; year: string | null }) {
   const sections = useApi<SectionSummary[]>('/sections')
   const [chosen, setChosen] = useState<string | null>(null)
   const active = chosen ?? sections.data?.[0]?.id ?? null
-  const data = useApi<SectionResponse>(active ? `/districts/${districtId}/sections/${active}` : null)
+  const base = districtId === null ? '/state' : `/districts/${districtId}`
+  const data = useApi<SectionResponse>(active && year ? `${base}/sections/${active}?year=${year}` : null)
 
   if (sections.error) return <ErrorBox message={sections.error} />
   if (!sections.data) return <Loading />
@@ -38,7 +63,7 @@ function DsaSections({ districtId }: { districtId: number }) {
 
   return (
     <section aria-labelledby="dsa-heading" className="dsa">
-      <h2 id="dsa-heading">District Statistical Abstract</h2>
+      <h2 id="dsa-heading">{districtId === null ? 'State' : 'District'} Statistical Abstract</h2>
       <div className="tabs" role="tablist" aria-label="DSA sections">
         {sections.data.map((s) => (
           <button
@@ -53,51 +78,66 @@ function DsaSections({ districtId }: { districtId: number }) {
         {current && <p className="muted">{current.description}</p>}
         {data.loading && <Loading />}
         {data.error && <ErrorBox message={data.error} />}
-        {data.data && <div className="dsa-grid">{data.data.cards.map((c) => <DsaCard key={c.id} card={c} />)}</div>}
+        {data.data && <div className="dsa-grid">{data.data.cards.map((c) => <DsaCard key={c.id} card={c} split={districtId === null ? 'district' : 'taluka'} historyPath={`${base}/cards/${c.id}/history`} selectedYear={year} />)}</div>}
       </div>
     </section>
   )
 }
 
-export default function DistrictPage() {
+export default function DashboardPage() {
   const params = useParams()
-  const districtId = Number(params.id)
+  const isState = params.id === undefined || params.id === 'state'
+  const districtId = isState ? 0 : Number(params.id)
+  const validId = isState || (Number.isInteger(districtId) && districtId > 0)
   const navigate = useNavigate()
   const [pickedYear, setPickedYear] = useState<string | null>(null)
 
   const districts = useApi<District[]>('/districts')
   const meta = useApi<Meta>('/meta')
   const year = pickedYear ?? meta.data?.latestYear ?? null
-  const district = districts.data?.find((d) => d.id === districtId)
+  const district = isState ? undefined : districts.data?.find((d) => d.id === districtId)
 
-  const overview = useApi<OverviewResponse>(year ? `/districts/${districtId}/overview?year=${year}` : null)
-  const mix = useApi<SectorMixResponse>(year ? `/districts/${districtId}/sector-mix?year=${year}` : null)
-  const peers = district ? (districts.data ?? []).filter((d) => d.division === district.division) : []
-  const peerIds = peers.map((p) => p.id).join(',')
-  const trend = useApi<SeriesResponse>(Number.isInteger(districtId) && districtId > 0 ? `/gddp/series?districts=${districtId}&metric=dist` : null)
-  const compare = useApi<SeriesResponse>(peerIds ? `/gddp/series?districts=${peerIds}&metric=dist` : null)
+  const overview = useApi<OverviewResponse>(!isState && year ? `/districts/${districtId}/overview?year=${year}` : null)
+  const stateData = useApi<StateResponse>(isState && year ? `/state?year=${year}` : null)
+  const mix = useApi<SectorMixResponse>(year ? (isState ? `/state/sector-mix?year=${year}` : `/districts/${districtId}/sector-mix?year=${year}`) : null)
+  const trend = useApi<SeriesResponse>(!isState && validId ? `/gddp/series?districts=${districtId}&metric=dist` : null)
   const [failedMaps, setFailedMaps] = useState<string[]>([])
 
-  if (!Number.isInteger(districtId) || districtId <= 0) return <Navigate to="/district" replace />
+  if (!validId) return <Navigate to="/" replace />
   if (districts.error) return <ErrorBox message={districts.error} />
   if (!districts.data) return <Loading />
-  if (!district) return <Empty>District not found.</Empty>
+  if (!isState && !district) return <Empty>District not found.</Empty>
 
+  const name = isState ? 'Maharashtra' : district!.name
   const o = overview.data?.overview
-  const growth = o?.perc_lastyr
-  const mapSrc = `${import.meta.env.BASE_URL}maps/${slugOf(district.name)}.svg`
+  const st = stateData.data
+  const stateTrend = st?.trend ?? []
+  const stateGrowth = (() => {
+    const i = stateTrend.findIndex((t) => t.year === st?.year)
+    const cur = stateTrend[i]?.gddp
+    const prev = stateTrend[i - 1]?.gddp
+    return i > 0 && cur != null && prev ? Math.round((cur / prev - 1) * 10000) / 100 : null
+  })()
+  const statePop = st ? st.districts.reduce((a, d) => a + (d.combinedWithOther ? 0 : d.pop ?? 0), 0) : null
+  const fastest = st?.districts.reduce<StateRow | null>(
+    (best, d) => (d.perc_lastyr !== null && (!best || d.perc_lastyr > (best.perc_lastyr ?? -Infinity)) ? d : best), null)
+  const growth = isState ? stateGrowth : o?.perc_lastyr
+  const mapSrc = isState ? '' : `${import.meta.env.BASE_URL}maps/${slugOf(district!.name)}.svg`
+  const loadError = isState ? stateData.error : overview.error
+  const gddpYear = isState ? st?.year : overview.data?.year
 
   return (
     <>
       <div className="page-head">
         <div className="page-title">
-          <p className="eyebrow">{district.division} division</p>
-          <h1>{district.name}</h1>
+          <p className="eyebrow">{isState ? 'State · all districts' : `${district!.division} division`}</p>
+          <h1>{name}</h1>
         </div>
         <div className="controls">
           <label>
-            <span>District</span>
-            <select value={district.id} onChange={(e) => { setPickedYear(null); navigate(`/district/${e.target.value}`) }}>
+            <span>Region</span>
+            <select value={isState ? 'state' : districtId} onChange={(e) => navigate(e.target.value === 'state' ? '/' : `/dashboard/${e.target.value}`)}>
+              <option value="state">Maharashtra (State)</option>
               {districts.data.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </label>
@@ -110,52 +150,71 @@ export default function DistrictPage() {
         </div>
       </div>
 
-      {overview.error && <ErrorBox message={overview.error} />}
+      {loadError && <ErrorBox message={loadError} />}
+      {gddpYear && year && !sameYear(gddpYear, year) && (
+        <p className="note">GDDP estimates for {fy(year)} are not published yet, so GDDP, income, population and sector figures show {fy(gddpYear)}.</p>
+      )}
       <div className="kpis">
-        {!failedMaps.includes(mapSrc) && (
+        {!isState && !failedMaps.includes(mapSrc) && (
           <img
-            className="district-map" src={mapSrc} alt={`Map of ${district.name} district`}
+            className="district-map" src={mapSrc} alt={`Map of ${name} district`}
             onError={() => setFailedMaps((f) => [...f, mapSrc])}
           />
         )}
-        <Kpi label="GDDP (nominal)" value={crore(o?.dist)} hint={o?.gddp_rank ? `Rank ${o.gddp_rank} of ${o.district_count}` : undefined} />
-        <Kpi label="Per capita income" value={inr(o?.per_cap_dist)} hint={o?.per_cap_state ? `State: ${inr(o.per_cap_state)}` : 'per annum'} />
-        <Kpi label="Share in state GSDP" value={pct(o?.perc_dis_state)} />
+        {isState ? (
+          <>
+            <Kpi label="GSDP (nominal)" value={crore(st?.state?.state)} hint="₹ crore" />
+            <Kpi label="Per capita income" value={inr(st?.state?.per_cap_state)} hint="₹ per annum" />
+            <Kpi label="Districts" value={st ? String(st.districts.length) : ''} />
+            <Kpi label="Largest district economy" value={st?.districts[0]?.name ?? ''} hint={crore(st?.districts[0]?.dist)} />
+            <Kpi label="Fastest-growing district" value={fastest?.name ?? ''} hint={fastest ? `${pct(fastest.perc_lastyr)} over previous year` : undefined} tone="up" />
+          </>
+        ) : (
+          <>
+            <Kpi label="GDDP (nominal)" value={crore(o?.dist)} hint={o?.gddp_rank ? `Rank ${o.gddp_rank} of ${o.district_count}` : undefined} />
+            <Kpi label="Per capita income" value={inr(o?.per_cap_dist)} hint={o?.per_cap_state ? `State: ${inr(o.per_cap_state)}` : '₹ per annum'} />
+            <Kpi label="Share in state GSDP" value={pct(o?.perc_dis_state)} />
+          </>
+        )}
         <Kpi
           label="Growth over previous year" value={pct(growth)}
           hint={growth === null || growth === undefined ? undefined : growth >= 0 ? '▲ nominal' : '▼ nominal'}
           tone={growth === null || growth === undefined ? undefined : growth >= 0 ? 'up' : 'down'}
         />
-        <Kpi label="Population" value={num(o?.pop, 0)} hint={fy(year)} />
+        <Kpi label="Population" value={num(isState ? statePop : o?.pop, 0)} hint="persons" />
       </div>
 
       <div className="grid-2">
-        <ChartCard title={`Nominal GDDP of ${district.name}`} subtitle="₹ crore">
-          {trend.error ? <ErrorBox message={trend.error} /> : !trend.data ? <Loading /> : (
+        <ChartCard
+          key={params.id ?? 'state'}
+          title={isState ? 'Nominal GSDP of Maharashtra' : `Nominal GDDP of ${name}`} subtitle="₹ crore"
+          expanded={() => (isState
+            ? (st ? <StateGddpExpanded state={st} /> : <Loading />)
+            : <DistrictGddpExpanded district={district!} districts={districts.data!} trend={trend.data} />)}
+        >
+          {isState ? (
+            stateData.error ? <ErrorBox message={stateData.error} /> : !st ? <Loading /> : (
+              <LineChart
+                labels={stateTrend.map((t) => fy(t.year))} yTitle="GSDP (₹ crore)" format={(v) => crore(v)}
+                series={[{ label: name, data: stateTrend.map((t) => t.gddp), color: PALETTE[1], emphasis: true }]}
+              />
+            )
+          ) : trend.error ? <ErrorBox message={trend.error} /> : !trend.data ? <Loading /> : (
             <LineChart
               labels={trend.data.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
-              series={[{ label: district.name, data: trend.data.series[0]?.values ?? [], color: PALETTE[1], emphasis: true }]}
+              series={[{ label: name, data: trend.data.series[0]?.values ?? [], color: PALETTE[1], emphasis: true }]}
             />
           )}
         </ChartCard>
-        <ChartCard title={`Sector share – ${fy(year)}`} subtitle="Share of GVA by sector">
-          {mix.error ? <ErrorBox message={mix.error} /> : !mix.data ? <Loading /> : <SectorCharts mix={mix.data} districtName={district.name} />}
+        <ChartCard
+          title={`Sector share – ${fy(mix.data?.year ?? year)}`} subtitle="Share of GVA by sector (%)" legend={SECTOR_LEGEND}
+          expanded={() => (mix.data ? <SectorExpanded mix={mix.data} districtName={isState ? null : name} year={year} /> : <Loading />)}
+        >
+          {mix.error ? <ErrorBox message={mix.error} /> : !mix.data ? <Loading /> : <SectorCharts mix={mix.data} districtName={isState ? null : name} callouts />}
         </ChartCard>
       </div>
 
-      <ChartCard title={`Nominal GDDP – districts within ${district.division} division`} subtitle="₹ crore" height={360}>
-        {compare.error ? <ErrorBox message={compare.error} /> : !compare.data ? <Loading /> : (
-          <LineChart
-            labels={compare.data.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
-            series={compare.data.series.map((s, i) => {
-              const d = peers.find((p) => p.id === s.districtId)
-              return { label: d?.name ?? String(s.districtId), data: s.values, color: PALETTE[i % PALETTE.length], emphasis: s.districtId === districtId }
-            })}
-          />
-        )}
-      </ChartCard>
-
-      <DsaSections key={districtId} districtId={districtId} />
+      <DsaSections key={isState ? 'state' : districtId} districtId={isState ? null : districtId} year={year} />
     </>
   )
 }

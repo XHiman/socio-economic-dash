@@ -4,7 +4,7 @@ import { query, type Db } from '../db.js';
 import type { SchemaCatalog } from '../schema.js';
 import type { SectionDef } from '../sections.js';
 import * as gddp from '../services/gddp.js';
-import { loadCard } from '../services/cards.js';
+import { loadCard, loadCardHistory, loadStateCard, loadStateCardHistory } from '../services/cards.js';
 import { describeTables, exploreTable } from '../services/explore.js';
 
 export interface ApiContext { db: Db; catalog: SchemaCatalog; sections: SectionDef[] }
@@ -37,10 +37,11 @@ export function apiRouter(ctx: ApiContext): Router {
     const rows = await query(db, 'SELECT 1 FROM dim_district WHERE district_id = ?', [districtId]);
     if (!rows.length) throw new HttpError(404, 'District not found');
   };
+  /** GDDP year to serve for a selection: the latest estimate at or before it (GDDP lags the DSA edition year). */
   const resolveYear = async (raw: unknown): Promise<string> => {
     const years = await gddp.listYears(db);
-    const y = raw === undefined ? years.at(-1) : parse(year, raw);
-    if (!y || !years.includes(y)) throw new HttpError(404, 'Year not available');
+    const y = raw === undefined ? years.at(-1) : gddp.gddpYearFor(years, parse(year, raw));
+    if (!y) throw new HttpError(404, 'Year not available');
     return y;
   };
 
@@ -51,7 +52,7 @@ export function apiRouter(ctx: ApiContext): Router {
   }));
 
   r.get('/meta', wrap(async (_req, res) => {
-    const years = await gddp.listYears(db);
+    const years = await gddp.listSelectableYears(db);
     res.json({ years, latestYear: years.at(-1) ?? null, metrics: gddp.GDDP_METRICS });
   }));
 
@@ -65,6 +66,41 @@ export function apiRouter(ctx: ApiContext): Router {
   r.get('/state', wrap(async (req, res) => {
     const y = await resolveYear(req.query.year);
     res.json({ year: y, ...(await gddp.stateOverview(db, y)) });
+  }));
+
+  r.get('/state/sector-mix', wrap(async (req, res) => {
+    const y = await resolveYear(req.query.year);
+    res.json({ year: y, district: null, state: (await gddp.sectorMix(db, 0, y)).state });
+  }));
+
+  r.get('/state/sections/:sectionId', wrap(async (req, res) => {
+    const section = sections.find((s) => s.id === parse(slug, req.params.sectionId));
+    if (!section) throw new HttpError(404, 'Section not found');
+    const selected = req.query.year === undefined ? undefined : parse(year, req.query.year);
+    const districts = await query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en');
+    const cards = [];
+    for (const c of section.cards) cards.push(await loadStateCard(db, catalog, c, districts, selected));
+    res.json({ id: section.id, title: section.title, cards });
+  }));
+
+  const findCard = (raw: unknown) => {
+    const cardId = parse(slug, raw);
+    const card = sections.flatMap((s) => s.cards).find((c) => c.id === cardId);
+    if (!card) throw new HttpError(404, 'Card not found');
+    return card;
+  };
+
+  r.get('/state/cards/:cardId/history', wrap(async (req, res) => {
+    const card = findCard(req.params.cardId);
+    const districts = await query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en');
+    res.json(await loadStateCardHistory(db, catalog, card, districts));
+  }));
+
+  r.get('/districts/:id/cards/:cardId/history', wrap(async (req, res) => {
+    const districtId = parse(id, req.params.id);
+    const card = findCard(req.params.cardId);
+    await districtExists(districtId);
+    res.json(await loadCardHistory(db, catalog, card, districtId));
   }));
 
   r.get('/districts/:id/overview', wrap(async (req, res) => {
@@ -99,7 +135,8 @@ export function apiRouter(ctx: ApiContext): Router {
     const section = sections.find((s) => s.id === parse(slug, req.params.sectionId));
     if (!section) throw new HttpError(404, 'Section not found');
     await districtExists(districtId);
-    const cards = await Promise.all(section.cards.map((c) => loadCard(db, catalog, c, districtId)));
+    const selected = req.query.year === undefined ? undefined : parse(year, req.query.year);
+    const cards = await Promise.all(section.cards.map((c) => loadCard(db, catalog, c, districtId, selected)));
     res.json({ id: section.id, title: section.title, cards });
   }));
 

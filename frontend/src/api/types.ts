@@ -38,13 +38,23 @@ export interface StateResponse {
 }
 
 export interface SectionSummary { id: string; title: string; description: string; cards: { id: string; title: string; kind: string }[] }
-export interface CardColumn { key: string; label: string; unit?: string }
+export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; total?: boolean }
 export interface CardData {
   id: string; title: string; kind: 'kpis' | 'breakdown' | 'taluka';
   columns: CardColumn[];
+  /** Source table, e.g. dsa_11a. */
+  table: string;
+  /** Columns are additive parts of a whole (enables the stacked "All" view). */
+  stackable: boolean;
   year: string | null;
   total: Record<string, number | null> | null;
   rows: { taluka: string; values: Record<string, number | null> }[];
+}
+export interface CardYear { total: Record<string, number | null> | null; rows: CardData['rows'] }
+/** Every reference year of a card; tables without a year column have years: [] and data[''] */
+export interface CardHistory extends Omit<CardData, 'year' | 'total' | 'rows'> {
+  years: string[];
+  data: Record<string, CardYear>;
 }
 export interface SectionResponse { id: string; title: string; cards: CardData[] }
 

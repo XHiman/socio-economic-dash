@@ -34,6 +34,26 @@ export async function listYears(db: Db): Promise<string[]> {
   return rows.map((r) => r.y);
 }
 
+/**
+ * Years the page can be set to: GDDP estimate years plus the DSA edition (reference) years. The DSA cards
+ * are published for a later edition year than the latest GDDP estimate (e.g. DSA 2024-25, GDDP up to 2023-24).
+ */
+export async function listSelectableYears(db: Db): Promise<string[]> {
+  const rows = await query<{ y: string }>(
+    db,
+    `SELECT data_year AS y FROM dsa_gddp WHERE src_table = ? AND data_year IS NOT NULL
+     UNION SELECT reference_year FROM dsa_gddp WHERE src_table = ? AND reference_year IS NOT NULL ORDER BY y`,
+    [GDDP_SOURCE, GDDP_SOURCE],
+  );
+  return rows.map((r) => r.y.replace('_', '-'));
+}
+
+const startYear = (y: string) => /^\d{4}/.exec(y)?.[0] ?? '';
+/** Latest GDDP year starting at or before the selected one (undefined if the selection predates all of them). */
+export function gddpYearFor(years: string[], selected: string): string | undefined {
+  return years.filter((y) => startYear(y) <= startYear(selected)).at(-1);
+}
+
 export async function districtOverview(db: Db, districtId: number, year: string) {
   const [row] = await query<Record<string, number | null>>(
     db,
