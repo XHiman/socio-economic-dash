@@ -58,6 +58,8 @@ MariaDB runs natively on the VM. Docker, `docker-compose.yml`, `db:seed` and `db
 3. Create `/etc/socioecon/api.env` (mode 640, group `socioecon`) from `deploy/api.env.example` with the real `DB_PASSWORD`.
 4. Install `deploy/socioecon-api.service` (`systemctl enable --now socioecon-api`).
 5. Frontend: `cd frontend && npm ci && npm run build`; copy `dist/*` to `/var/www/socioecon-site/Dashboard/Socio-Economic/`.
+
+**Updating later:** `bash deploy/deploy.sh` (builds, copies the frontend to the web root, restarts the API, checks). Building alone does not change the live site.
 6. Add the directives from `deploy/apache-socioecon.conf` to the existing `<VirtualHost>`; `sudo a2enmod proxy proxy_http headers`; `sudo apachectl configtest && sudo systemctl reload apache2`.
 7. Check `https://<host>/Dashboard/Socio-Economic/api/health` and `https://<host>/Dashboard/Socio-Economic/`.
 
