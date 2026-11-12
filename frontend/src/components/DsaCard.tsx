@@ -3,7 +3,9 @@ import type { CardData } from '../api/types'
 import { seriesColor } from '../lib/chart'
 import { fy, num } from '../lib/format'
 import { sameYear } from '../lib/years'
+import { describeValues } from '../lib/a11y'
 import { CardModal } from './CardModal'
+import { Chip, ChipGroup } from './Tabs'
 import { Icon, ICON } from './Modal'
 import { ProfileCard } from './ProfileCard'
 import { CardTable, stackParts, unitOf, type Split } from './CardTable'
@@ -35,7 +37,10 @@ export function CardBody({ card, split }: { card: CardData; split: Split }) {
     const shared = units.size === 1 ? [...units][0] : ''
     return (
       <div className="split">
-        <div className="chart-body" style={{ height: Math.max(180, card.columns.length * 38) }}>
+        <div
+          className="chart-body" style={{ height: Math.max(180, card.columns.length * 38) }}
+          role="img" aria-label={`${card.title}. ${describeValues(card.columns.map((c) => c.label), card.columns.map((c) => card.total![c.key] ?? null), shared || undefined)}`}
+        >
           <BarChart
             horizontal
             labels={card.columns.map((c) => c.label)}
@@ -67,27 +72,19 @@ export function CardBody({ card, split }: { card: CardData; split: Split }) {
   return (
     <>
       {card.columns.length > 1 && (
-        <div className="chips" role="tablist" aria-label="Metric">
-          {card.columns.map((c, i) => (canAll && c.total ? null : (
-            <button
-              key={c.key} type="button" role="tab" aria-selected={i === active}
-              className={`chip ${i === active ? 'on' : ''}`} onClick={() => setActive(i)}
-            >
-              {c.label}
-            </button>
-          )))}
-          {canAll && (
-            <button type="button" role="tab" aria-selected={all} className={`chip ${all ? 'on' : ''}`} onClick={() => setActive(-1)}>
-              All (stacked)
-            </button>
-          )}
-        </div>
+        <ChipGroup label="Metric">
+          {card.columns.map((c, i) => (canAll && c.total ? null : <Chip key={c.key} on={i === active} onClick={() => setActive(i)}>{c.label}</Chip>))}
+          {canAll && <Chip on={all} onClick={() => setActive(-1)}>All (stacked)</Chip>}
+        </ChipGroup>
       )}
       <p className="small muted">
         {all ? `All measures by ${split}` : <>{col.label}{unitOf(col)} by {split}</>}
         {!all && card.total?.[col.key] != null && <> &middot; {split === 'district' ? 'state' : 'district'} total <strong>{num(card.total[col.key])}</strong></>}
       </p>
-      <div className="chart-body" style={{ height: 260 }}>
+      <div
+        className="chart-body" style={{ height: 260 }}
+        role="img" aria-label={`${card.title}. ${all ? `All measures by ${split}.` : describeValues(labels, card.rows.map((r) => r.values[col.key] ?? null), col.unit)}`}
+      >
         {all ? (
           <SeriesChart
             type="bar" stacked labels={labels} unit={parts.every((c) => c.unit === parts[0]!.unit) ? parts[0]!.unit : undefined}

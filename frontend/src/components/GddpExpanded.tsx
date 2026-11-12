@@ -5,14 +5,12 @@ import type { District, SeriesResponse, StateResponse, StateRow } from '../api/t
 import { seriesColor } from '../lib/chart'
 import { crore, fy, num, pct } from '../lib/format'
 import { BarChart, LineChart } from './charts'
+import { describeTrend, describeValues } from '../lib/a11y'
 import { ChartPanel } from './Modal'
+import { Tab, TabList } from './Tabs'
 import { ErrorBox, Loading } from './ui'
 
 const REFERENCE = 'District Domestic Product estimates (dsa_gddp), nominal'
-
-function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) {
-  return <button type="button" role="tab" aria-selected={on} className={`tab ${on ? 'on' : ''}`} onClick={onClick}>{children}</button>
-}
 
 /** Full-screen view of a district's GDDP: its own trend, or all districts in its division. */
 export function DistrictGddpExpanded({ district, districts, trend }: { district: District; districts: District[]; trend: SeriesResponse | null }) {
@@ -24,10 +22,13 @@ export function DistrictGddpExpanded({ district, districts, trend }: { district:
   return (
     <ChartPanel
       title={title} reference={REFERENCE}
-      tabs={<>
-        <Tab on={tab === 'self'} onClick={() => setTab('self')}>{district.name}</Tab>
-        <Tab on={tab === 'division'} onClick={() => setTab('division')}>{`Districts in ${district.division} division`}</Tab>
-      </>}
+      description={tab === 'self' && trend ? describeTrend(trend.years.map(fy), trend.series[0]?.values ?? [], crore) : `Lines for ${peers.length} districts. Values are in ₹ crore.`}
+      tabs={(
+        <TabList label="GDDP view">
+          <Tab selected={tab === 'self'} onSelect={() => setTab('self')}>{district.name}</Tab>
+          <Tab selected={tab === 'division'} onSelect={() => setTab('division')}>{`Districts in ${district.division} division`}</Tab>
+        </TabList>
+      )}
     >
       {tab === 'self' ? (
         !trend ? <Loading /> : (
@@ -113,11 +114,14 @@ export function StateGddpExpanded({ state }: { state: StateResponse }) {
   return (
     <ChartPanel
       title={title} reference={REFERENCE} canDownload={tab !== 'ranking'} plain={tab === 'ranking'}
-      tabs={<>
-        <Tab on={tab === 'trend'} onClick={() => setTab('trend')}>State trend</Tab>
-        <Tab on={tab === 'division'} onClick={() => setTab('division')}>By division</Tab>
-        <Tab on={tab === 'ranking'} onClick={() => setTab('ranking')}>District ranking</Tab>
-      </>}
+      description={tab === 'trend' ? describeTrend(state.trend.map((t) => fy(t.year)), state.trend.map((t) => t.gddp), crore) : tab === 'division' ? describeValues(byDivision.map(([d]) => d), byDivision.map(([, v]) => v), '₹ crore') : undefined}
+      tabs={(
+        <TabList label="GSDP view">
+          <Tab selected={tab === 'trend'} onSelect={() => setTab('trend')}>State trend</Tab>
+          <Tab selected={tab === 'division'} onSelect={() => setTab('division')}>By division</Tab>
+          <Tab selected={tab === 'ranking'} onSelect={() => setTab('ranking')}>District ranking</Tab>
+        </TabList>
+      )}
     >
       {tab === 'trend' ? (
         <LineChart

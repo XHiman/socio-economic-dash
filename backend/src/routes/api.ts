@@ -1,13 +1,18 @@
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { query, type Db } from '../db.js';
 import type { SchemaCatalog } from '../schema.js';
 import type { SectionDef } from '../sections.js';
 import * as gddp from '../services/gddp.js';
-import { loadCard, loadCardHistory, loadStateCard, loadStateCardHistory } from '../services/cards.js';
+import { atYear, loadCardHistory, loadStateCardHistory, type CardHistory } from '../services/cards.js';
+import { TtlCache } from '../services/cache.js';
 import { describeTables, exploreTable } from '../services/explore.js';
 
-export interface ApiContext { db: Db; catalog: SchemaCatalog; sections: SectionDef[] }
+export interface ApiContext { db: Db; catalog: SchemaCatalog; sections: SectionDef[]; heavyRateLimitPerMinute?: number }
+
+/** The data changes only when a new edition is loaded, so a few minutes of staleness is fine. */
+const CACHE_TTL_MS = 5 * 60_000;
 
 export class HttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -31,16 +36,32 @@ const wrap = (fn: (req: Request, res: Response) => Promise<unknown>): RequestHan
 export function apiRouter(ctx: ApiContext): Router {
   const { db, catalog, sections } = ctx;
   const r = Router();
+
+  // Cached lookups (bounded key sets: validated ids and slugs only).
+  const districtList = new TtlCache<{ id: number; name: string; division?: string }[]>(CACHE_TTL_MS, 2);
+  const years = new TtlCache<string[]>(CACHE_TTL_MS, 1);
+  const stateHistories = new TtlCache<CardHistory>(CACHE_TTL_MS, 64);
+  const districtHistories = new TtlCache<CardHistory>(CACHE_TTL_MS, 1024);
+  const districts = () => districtList.get('all', () => query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en'));
+  const stateHistory = async (card: SectionDef['cards'][number]) =>
+    stateHistories.get(card.id, async () => loadStateCardHistory(db, catalog, card, await districts()));
+  const districtHistory = (districtId: number, card: SectionDef['cards'][number]) =>
+    districtHistories.get(`${districtId}:${card.id}`, () => loadCardHistory(db, catalog, card, districtId));
+
+  // Card endpoints are the expensive ones (state views run dozens of queries on a cache miss); give them their own, lower limit.
+  const heavy = rateLimit({
+    windowMs: 60_000, limit: ctx.heavyRateLimitPerMinute ?? 60, standardHeaders: 'draft-7', legacyHeaders: false,
+  });
+  r.use(['/state/sections', '/state/cards', '/districts/:id/sections', '/districts/:id/cards', '/explore'], heavy);
   r.use((_req, res, next) => { res.setHeader('Cache-Control', 'public, max-age=60'); next(); });
 
   const districtExists = async (districtId: number) => {
-    const rows = await query(db, 'SELECT 1 FROM dim_district WHERE district_id = ?', [districtId]);
-    if (!rows.length) throw new HttpError(404, 'District not found');
+    if (!(await districts()).some((d) => d.id === districtId)) throw new HttpError(404, 'District not found');
   };
   /** GDDP year to serve for a selection: the latest estimate at or before it (GDDP lags the DSA edition year). */
   const resolveYear = async (raw: unknown): Promise<string> => {
-    const years = await gddp.listYears(db);
-    const y = raw === undefined ? years.at(-1) : gddp.gddpYearFor(years, parse(year, raw));
+    const available = await years.get('gddp', () => gddp.listYears(db));
+    const y = raw === undefined ? available.at(-1) : gddp.gddpYearFor(available, parse(year, raw));
     if (!y) throw new HttpError(404, 'Year not available');
     return y;
   };
@@ -52,15 +73,15 @@ export function apiRouter(ctx: ApiContext): Router {
   }));
 
   r.get('/meta', wrap(async (_req, res) => {
-    const years = await gddp.listSelectableYears(db);
-    res.json({ years, latestYear: years.at(-1) ?? null, metrics: gddp.GDDP_METRICS });
+    const selectable = await years.get('selectable', () => gddp.listSelectableYears(db));
+    res.json({ years: selectable, latestYear: selectable.at(-1) ?? null, metrics: gddp.GDDP_METRICS });
   }));
 
   r.get('/districts', wrap(async (_req, res) => {
-    const rows = await query<{ id: number; name: string; division: string }>(
+    const list = await districtList.get('full', () => query<{ id: number; name: string; division: string }>(
       db, 'SELECT district_id AS id, name_en AS name, division_en AS division FROM dim_district ORDER BY name_en',
-    );
-    res.json(rows);
+    ));
+    res.json(list);
   }));
 
   r.get('/state', wrap(async (req, res) => {
@@ -77,9 +98,7 @@ export function apiRouter(ctx: ApiContext): Router {
     const section = sections.find((s) => s.id === parse(slug, req.params.sectionId));
     if (!section) throw new HttpError(404, 'Section not found');
     const selected = req.query.year === undefined ? undefined : parse(year, req.query.year);
-    const districts = await query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en');
-    const cards = [];
-    for (const c of section.cards) cards.push(await loadStateCard(db, catalog, c, districts, selected));
+    const cards = await Promise.all(section.cards.map(async (c) => atYear(await stateHistory(c), selected)));
     res.json({ id: section.id, title: section.title, cards });
   }));
 
@@ -91,16 +110,14 @@ export function apiRouter(ctx: ApiContext): Router {
   };
 
   r.get('/state/cards/:cardId/history', wrap(async (req, res) => {
-    const card = findCard(req.params.cardId);
-    const districts = await query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en');
-    res.json(await loadStateCardHistory(db, catalog, card, districts));
+    res.json(await stateHistory(findCard(req.params.cardId)));
   }));
 
   r.get('/districts/:id/cards/:cardId/history', wrap(async (req, res) => {
     const districtId = parse(id, req.params.id);
     const card = findCard(req.params.cardId);
     await districtExists(districtId);
-    res.json(await loadCardHistory(db, catalog, card, districtId));
+    res.json(await districtHistory(districtId, card));
   }));
 
   r.get('/districts/:id/overview', wrap(async (req, res) => {
@@ -136,7 +153,7 @@ export function apiRouter(ctx: ApiContext): Router {
     if (!section) throw new HttpError(404, 'Section not found');
     await districtExists(districtId);
     const selected = req.query.year === undefined ? undefined : parse(year, req.query.year);
-    const cards = await Promise.all(section.cards.map((c) => loadCard(db, catalog, c, districtId, selected)));
+    const cards = await Promise.all(section.cards.map(async (c) => atYear(await districtHistory(districtId, c), selected)));
     res.json({ id: section.id, title: section.title, cards });
   }));
 

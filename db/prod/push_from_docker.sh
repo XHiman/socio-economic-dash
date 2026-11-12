@@ -76,8 +76,10 @@ mariadb $VM -e "
   SELECT COUNT(*) AS gddp_rows FROM dsa_gddp;" || { echo "Verification query failed." >&2; exit 14; }
 EOF
 
+# -e VM_PW (no value) copies it from this shell's environment, so it never appears in the command line / process list.
+export VM_PW
 docker exec -i \
-  -e VM_PW="$VM_PW" -e TUNNEL_HOST="$TUNNEL_HOST" -e TUNNEL_PORT="$TUNNEL_PORT" -e DB_USER="$DB_USER" \
+  -e VM_PW -e TUNNEL_HOST="$TUNNEL_HOST" -e TUNNEL_PORT="$TUNNEL_PORT" -e DB_USER="$DB_USER" \
   "$CONTAINER" sh -c "$REMOTE"
 code=$?
 [ "$code" -eq 0 ] || fail "Copy failed inside the container (exit code $code)."

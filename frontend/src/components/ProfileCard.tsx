@@ -51,12 +51,12 @@ export function ProfileCard({ card }: { card: CardData }) {
             className="split-bar" role="img"
             aria-label={`${num(urban, 1)}% urban, ${num(rural, 1)}% rural`}
           >
-            {urbanWidth > 0 && <span className="urban" style={{ width: `${urbanWidth}%` }}>{num(urban, 1)}%</span>}
-            {urbanWidth < 100 && <span className="rural">{num(rural, 1)}%</span>}
+            {urbanWidth > 0 && <span className="urban" style={{ width: `${urbanWidth}%` }} />}
+            {urbanWidth < 100 && <span className="rural" />}
           </div>
           <ul className="split-legend">
-            <li><i className="urban" />Urban</li>
-            <li><i className="rural" />Rural</li>
+            <li><i className="urban" />Urban {num(urban, 1)}%</li>
+            <li><i className="rural" />Rural {num(rural, 1)}%</li>
           </ul>
         </section>
       )}

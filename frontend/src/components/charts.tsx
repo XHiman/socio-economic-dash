@@ -1,6 +1,6 @@
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { Chart, type ChartOptions, type Plugin } from 'chart.js'
-import { AXIS, GRID, seriesColor } from '../lib/chart'
+import { AXIS, chartAnimation, GRID, seriesColor } from '../lib/chart'
 import { compact, num } from '../lib/format'
 
 export interface LineSeries { label: string; data: (number | null)[]; color?: string; emphasis?: boolean }
@@ -171,7 +171,7 @@ export function SeriesChart({ labels, series, type = 'bar', stacked = false, hor
   const options = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: { duration: 500 },
+    animation: chartAnimation(),
     indexAxis: category,
     interaction: { mode: 'index', intersect: false, axis: category },
     plugins: {

@@ -87,11 +87,12 @@ export default function ExplorerPage() {
           </fieldset>
         </aside>
 
-        <section className="card explorer-main" aria-live="polite">
+        <section className="card explorer-main" aria-label="Table data">
           <header className="card-head">
             <h3>{table?.name.replace('dsa_', 'DSA ')}</h3>
             <button type="button" className="btn" onClick={downloadCsv} disabled={!result.data?.rows.length}>Download CSV</button>
           </header>
+          <p className="sr-only" role="status">{result.data ? `${result.data.rows.length} rows loaded.` : ''}</p>
           {!cols.length ? <Empty>Select at least one column.</Empty>
             : result.loading ? <Loading />
             : result.error ? <ErrorBox message={result.error} />
@@ -101,7 +102,7 @@ export default function ExplorerPage() {
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Year</th>
+                      <th scope="col">Reference Year</th>
                       {result.data.rows.some((r) => '_taluka' in r) && <th scope="col">Taluka</th>}
                       {result.data.columns.map((c) => <th key={c} scope="col" className="num">{humanize(c)}</th>)}
                     </tr>

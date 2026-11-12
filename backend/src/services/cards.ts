@@ -94,10 +94,6 @@ export async function loadCardHistory(db: Db, catalog: SchemaCatalog, card: Card
   return { ...meta(card), years: Object.keys(data).filter(Boolean).sort(), data };
 }
 
-export async function loadCard(db: Db, catalog: SchemaCatalog, card: CardDef, districtId: number, year?: string): Promise<CardResult> {
-  return atYear(await loadCardHistory(db, catalog, card, districtId), year);
-}
-
 /** Combine per-district values for one column: sum for counts; mean for rates/averages, weighted when weights are given. */
 function combine(values: (number | null)[], agg: 'sum' | 'avg' | undefined, weights?: (number | null)[]): number | null {
   const v = values.filter((x): x is number => x !== null);
@@ -145,10 +141,4 @@ export async function loadStateCardHistory(
     };
   }
   return { ...meta(card), title: card.title.replace(/ by taluka$/, ' by district'), years: Object.keys(data).filter(Boolean).sort(), data };
-}
-
-export async function loadStateCard(
-  db: Db, catalog: SchemaCatalog, card: CardDef, districts: { id: number; name: string }[], year?: string,
-): Promise<CardResult> {
-  return atYear(await loadStateCardHistory(db, catalog, card, districts), year);
 }

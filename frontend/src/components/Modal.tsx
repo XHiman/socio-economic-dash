@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { exportPng, type LegendItem } from '../lib/download'
 
 export const ICON = {
@@ -19,46 +20,77 @@ export function Icon({ d, size = 16 }: { d: string; size?: number }) {
   )
 }
 
-/** Full-screen overlay: Esc / backdrop click / ✕ close it and the page behind doesn't scroll. */
+const FOCUSABLE = 'a[href], button:not(:disabled), select:not(:disabled), input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Full-screen dialog. It is rendered in <body> and the app root is made inert while it is open, so keyboard and
+ * screen-reader users can't reach the page behind it. Esc, a backdrop click or the close button dismiss it;
+ * Tab cycles inside it, and focus returns to whatever opened it.
+ */
 export function Modal({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
+  const titleId = useId()
+  const dialog = useRef<HTMLDivElement>(null)
   const closeBtn = useRef<HTMLButtonElement>(null)
   const onCloseRef = useRef(onClose)
   useEffect(() => { onCloseRef.current = onClose })
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
-    const prev = document.body.style.overflow
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const appRoot = document.getElementById('root')
+    const prevOverflow = document.body.style.overflow
+    appRoot?.setAttribute('inert', '')
     document.body.style.overflow = 'hidden'
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onCloseRef.current(); return }
+      if (e.key !== 'Tab' || !dialog.current) return
+      const items = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
+      if (!items.length) return
+      const first = items[0]!, last = items.at(-1)!
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', onKey)
     closeBtn.current?.focus()
-    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      appRoot?.removeAttribute('inert')
+      document.body.style.overflow = prevOverflow
+      opener?.focus()
+    }
   }, [])
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={dialog} className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="modal-head">
           <div>
-            <h3>{title}</h3>
+            <h2 id={titleId} className="modal-title">{title}</h2>
             {subtitle && <p className="muted small">{subtitle}</p>}
           </div>
           <button ref={closeBtn} type="button" className="icon-btn" onClick={onClose} aria-label="Close full screen" title="Close (Esc)"><Icon d={ICON.close} /></button>
         </header>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
-/** Toolbar + chart area for an expanded chart. Download stitches every canvas inside onto a white, watermarked PNG. */
-export function ChartPanel({ title, reference, legend, tabs, tools, canDownload = true, plain = false, children }: {
+/**
+ * Toolbar + chart area for an expanded chart. Download stitches every canvas inside onto a white, watermarked PNG.
+ * `description` is the text alternative announced for the chart.
+ */
+export function ChartPanel({ title, description, reference, legend, tabs, tools, canDownload = true, plain = false, children }: {
   title: string
+  description?: string
   reference?: string
   legend?: LegendItem[]
+  /** Tab list (use <TabList>) or a plain caption, shown left of the tools. */
   tabs?: ReactNode
   tools?: ReactNode
   canDownload?: boolean
-  /** No fixed chart height (tables). */
+  /** No fixed chart height, no image role (tables). */
   plain?: boolean
   children: ReactNode
 }) {
@@ -67,7 +99,7 @@ export function ChartPanel({ title, reference, legend, tabs, tools, canDownload 
   return (
     <>
       <div className="modal-bar">
-        <div className="tabs" role="tablist">{tabs}</div>
+        <div className="modal-bar-left">{tabs}</div>
         <div className="modal-tools">
           {tools}
           <button type="button" className="btn-tool" onClick={download} disabled={!canDownload} title={canDownload ? 'Download as PNG' : 'Download is available for charts'}>
@@ -76,7 +108,9 @@ export function ChartPanel({ title, reference, legend, tabs, tools, canDownload 
         </div>
       </div>
       <div className="modal-body">
-        <div ref={box} className={plain ? 'modal-plain' : 'modal-chart'}>{children}</div>
+        {plain
+          ? <div ref={box} className="modal-plain">{children}</div>
+          : <div ref={box} className="modal-chart" role="img" aria-label={description ? `${title}. ${description}` : title}>{children}</div>}
       </div>
       {reference && <footer className="modal-foot muted small">{reference}</footer>}
     </>

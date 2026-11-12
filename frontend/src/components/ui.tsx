@@ -36,7 +36,7 @@ export function Kpi({ label, value, hint, tone }: { label: string; value: string
 }
 
 /** Card with a title and a "download as PNG" action that stitches every canvas inside it. */
-export function ChartCard({ title, subtitle, children, height = 320, className = '', legend, expanded }: {
+export function ChartCard({ title, subtitle, children, height = 320, className = '', legend, expanded, description }: {
   title: string
   subtitle?: string
   children: ReactNode
@@ -44,6 +44,8 @@ export function ChartCard({ title, subtitle, children, height = 320, className =
   className?: string
   /** Colour key for charts whose legend is HTML, so the PNG export carries it. */
   legend?: LegendItem[]
+  /** Text alternative for the chart (announced instead of the canvas); omit while it is loading. */
+  description?: string
   /** Content of the full-screen view; adds an expand button when given. */
   expanded?: () => ReactNode
 }) {
@@ -73,7 +75,12 @@ export function ChartCard({ title, subtitle, children, height = 320, className =
         </div>
       </header>
       {open && expanded && <Modal title={title} onClose={() => setOpen(false)}>{expanded()}</Modal>}
-      <div ref={body} className="chart-body" style={{ height }}>{children}</div>
+      <div
+        ref={body} className="chart-body" style={{ height }}
+        {...(description ? { role: 'img', 'aria-label': `${title}. ${description}` } : {})}
+      >
+        {children}
+      </div>
     </section>
   )
 }

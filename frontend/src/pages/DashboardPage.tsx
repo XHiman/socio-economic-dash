@@ -1,91 +1,19 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useApi } from '../api/client'
-import type { District, Meta, OverviewResponse, SectionResponse, SectionSummary, SectorMixResponse, SeriesResponse, StateResponse, StateRow } from '../api/types'
-import { DoughnutChart, LineChart } from '../components/charts'
-import { DsaCard } from '../components/DsaCard'
+import type { District, Meta, OverviewResponse, SectionResponse, SectorMixResponse, SeriesResponse, StateResponse, StateRow } from '../api/types'
+import { LineChart } from '../components/charts'
+import { DsaSections } from '../components/DsaSections'
 import { ProfileCard } from '../components/ProfileCard'
-import { Masonry } from '../components/Masonry'
 import { DistrictGddpExpanded, StateGddpExpanded } from '../components/GddpExpanded'
-import { ChartPanel, ICON, Icon } from '../components/Modal'
+import { describeSectorMix, SectorCharts, SectorExpanded, sectorLegend } from '../components/SectorShare'
 import { ChartCard, Empty, ErrorBox, Kpi, Loading } from '../components/ui'
-import { sectorColors, seriesColor } from '../lib/chart'
+import { describeTrend } from '../lib/a11y'
+import { seriesColor } from '../lib/chart'
 import { crore, fy, inr, num, pct } from '../lib/format'
 import { sameYear } from '../lib/years'
 
 const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-
-const SECTOR_LABELS = ['Primary', 'Secondary', 'Tertiary']
-const sectorLegend = () => SECTOR_LABELS.map((label, i) => ({ label, color: sectorColors()[i]! }))
-
-function SectorCharts({ mix, districtName, callouts, names = false }: { mix: SectorMixResponse; districtName: string | null; callouts: boolean; names?: boolean }) {
-  const SECTOR_COLORS = sectorColors()
-  const vals = (m: SectorMixResponse['district']) => [m?.primary ?? null, m?.secondary ?? null, m?.tertiary ?? null]
-  return (
-    <>
-      <div className="doughnuts">
-        <figure><div className="pie"><DoughnutChart labels={SECTOR_LABELS} values={vals(mix.state)} colors={SECTOR_COLORS} callouts={callouts} names={names} /></div><figcaption>Maharashtra</figcaption></figure>
-        {districtName && <figure><div className="pie"><DoughnutChart labels={SECTOR_LABELS} values={vals(mix.district)} colors={SECTOR_COLORS} callouts={callouts} names={names} /></div><figcaption>{districtName}</figcaption></figure>}
-      </div>
-      <ul className="legend" aria-label="Sector legend">
-        {SECTOR_LABELS.map((l, i) => <li key={l}><span style={{ background: SECTOR_COLORS[i] }} />{l}</li>)}
-      </ul>
-    </>
-  )
-}
-
-/** Full-screen sector share, with the on-ring percentage callouts switchable. */
-function SectorExpanded({ mix, districtName, year }: { mix: SectorMixResponse; districtName: string | null; year: string | null }) {
-  const [callouts, setCallouts] = useState(true)
-  return (
-    <ChartPanel
-      title={`Sector share – ${fy(year)}`} reference="District Domestic Product estimates (dsa_gddp), share of GVA (%)" legend={sectorLegend()}
-      tabs={<span className="muted small">Share of GVA by sector (%)</span>}
-      tools={
-        <button type="button" className={`btn-tool ${callouts ? 'on' : ''}`} aria-pressed={callouts} onClick={() => setCallouts((c) => !c)} title="Show or hide the percentage callouts">
-          <Icon d={ICON.flip} />Callouts
-        </button>
-      }
-    >
-      <SectorCharts mix={mix} districtName={districtName} callouts={callouts} names={callouts} />
-    </ChartPanel>
-  )
-}
-
-/** districtId null = whole state: cards aggregate all districts and are split by district. */
-function DsaSections({ districtId, year }: { districtId: number | null; year: string | null }) {
-  const sections = useApi<SectionSummary[]>('/sections')
-  const [chosen, setChosen] = useState<string | null>(null)
-  const active = chosen ?? sections.data?.[0]?.id ?? null
-  const base = districtId === null ? '/state' : `/districts/${districtId}`
-  const data = useApi<SectionResponse>(active && year ? `${base}/sections/${active}?year=${year}` : null)
-
-  if (sections.error) return <ErrorBox message={sections.error} />
-  if (!sections.data) return <Loading />
-  const current = sections.data.find((s) => s.id === active)
-
-  return (
-    <section aria-labelledby="dsa-heading" className="dsa">
-      <h2 id="dsa-heading">{districtId === null ? 'State' : 'District'} Statistical Abstract</h2>
-      <div className="tabs" role="tablist" aria-label="DSA sections">
-        {sections.data.map((s) => (
-          <button
-            key={s.id} type="button" role="tab" id={`tab-${s.id}`} aria-selected={s.id === active}
-            aria-controls="dsa-panel" className={`tab ${s.id === active ? 'on' : ''}`} onClick={() => setChosen(s.id)}
-          >
-            {s.title}
-          </button>
-        ))}
-      </div>
-      <div id="dsa-panel" role="tabpanel" aria-labelledby={active ? `tab-${active}` : undefined}>
-        {current && <p className="muted">{current.description}</p>}
-        {data.loading && <Loading />}
-        {data.error && <ErrorBox message={data.error} />}
-        {data.data && <Masonry className="dsa-grid">{data.data.cards.filter((c) => districtId !== null || !c.static).map((c) => <DsaCard key={c.id} card={c} split={districtId === null ? 'district' : 'taluka'} historyPath={`${base}/cards/${c.id}/history`} selectedYear={year} />)}</Masonry>}
-      </div>
-    </section>
-  )
-}
 
 export default function DashboardPage() {
   const params = useParams()
@@ -168,6 +96,7 @@ export default function DashboardPage() {
       {gddpYear && year && !sameYear(gddpYear, year) && (
         <p className="note">GDDP estimates for {fy(year)} are not up yet, so GDDP, income, population and sector figures show {fy(gddpYear)}.</p>
       )}
+      <h2 className="sr-only">Key figures</h2>
       <div className="kpis">
         {!isState && !failedMaps.includes(mapSrc) && (
           <img
@@ -197,10 +126,14 @@ export default function DashboardPage() {
         <Kpi label="Population" value={num(isState ? statePop : o?.pop, 0)} hint="persons" />
       </div>
 
+      <h2 className="sr-only">Economy and profile</h2>
       <div className="grid-2">
         <ChartCard
           key={params.id ?? 'state'}
           title={isState ? 'Nominal GSDP of Maharashtra' : `Nominal GDDP of ${name}`} subtitle="₹ crore"
+          description={isState
+            ? (st ? describeTrend(stateTrend.map((t) => fy(t.year)), stateTrend.map((t) => t.gddp), crore) : undefined)
+            : (trend.data ? describeTrend(trend.data.years.map(fy), trend.data.series[0]?.values ?? [], crore) : undefined)}
           expanded={() => (isState
             ? (st ? <StateGddpExpanded state={st} /> : <Loading />)
             : <DistrictGddpExpanded district={district!} districts={districts.data!} trend={trend.data} />)}
@@ -227,6 +160,7 @@ export default function DashboardPage() {
         ) : (
         <ChartCard
           title={`Sector share – ${fy(mix.data?.year ?? year)}`} subtitle="Share of GVA by sector (%)" legend={sectorLegend()}
+          description={mix.data ? describeSectorMix(mix.data, name) : undefined}
           expanded={() => (mix.data ? <SectorExpanded mix={mix.data} districtName={name} year={year} /> : <Loading />)}
         >
           {mix.error ? <ErrorBox message={mix.error} /> : !mix.data ? <Loading /> : <SectorCharts mix={mix.data} districtName={name} callouts={false} />}

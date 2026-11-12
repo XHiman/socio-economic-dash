@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CardColumn, CardData, CardHistory } from '../api/types'
 import { useApi } from '../api/client'
+import { describeValues } from '../lib/a11y'
 import { exportPng } from '../lib/download'
 import { fy, num } from '../lib/format'
 import { resolveYearIndex } from '../lib/years'
 import { CardTable, refLabel, stackParts, unitOf, type Split } from './CardTable'
 import { SeriesChart, type Series } from './charts'
 import { Icon, ICON, Modal } from './Modal'
+import { Chip, ChipGroup, Tab, TabList } from './Tabs'
 import { Empty, ErrorBox, Loading } from './ui'
 
 const clean = (name: string) => name.replace(/ \(synthetic\)$/, '')
@@ -113,26 +115,26 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
     : (timeSeries ? (all ? 'Financial years on the x-axis, stacked by measure' : `Financial years on the x-axis, one bar per ${split}`) : `${split === 'district' ? 'Districts' : 'Talukas'} on the x-axis`)
 
   const metricChips = tab === 'chart' && h.kind === 'taluka' && h.columns.length > 1 && (
-    <div className="chips" role="tablist" aria-label="Metric">
-      {h.columns.map((c, i) => (canAll && c.total ? null : (
-        <button key={c.key} type="button" role="tab" aria-selected={i === metric} className={`chip ${i === metric ? 'on' : ''}`} onClick={() => setMetric(i)}>{c.label}</button>
-      )))}
-      {canAll && (
-        <button type="button" role="tab" aria-selected={all} className={`chip ${all ? 'on' : ''}`} onClick={() => setMetric(-1)}>All (stacked)</button>
-      )}
-    </div>
+    <ChipGroup label="Metric">
+      {h.columns.map((c, i) => (canAll && c.total ? null : <Chip key={c.key} on={i === metric} onClick={() => setMetric(i)}>{c.label}</Chip>))}
+      {canAll && <Chip on={all} onClick={() => setMetric(-1)}>All (stacked)</Chip>}
+    </ChipGroup>
   )
+
+  const chartLabel = spec
+    ? `${h.title}. ${axisHint}. ${spec.series.length === 1
+      ? describeValues(spec.labels, spec.series[0]!.data, spec.unit)
+      : `${spec.series.length} series. Open the Data table tab for the values.`}`
+    : h.title
 
   return (
     <>
       <div className="modal-bar">
-        <div className="tabs" role="tablist" aria-label="View">
+        <TabList label="View">
           {(['chart', 'table'] as const).map((t) => (
-            <button key={t} type="button" role="tab" aria-selected={tab === t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
-              {t === 'chart' ? (h.kind === 'kpis' ? 'Overview' : 'Chart') : 'Data table'}
-            </button>
+            <Tab key={t} selected={tab === t} onSelect={() => setTab(t)}>{t === 'chart' ? (h.kind === 'kpis' ? 'Overview' : 'Chart') : 'Data table'}</Tab>
           ))}
-        </div>
+        </TabList>
         <div className="modal-tools">
           {years.length > 0 && (
             <label>
@@ -179,7 +181,9 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
               {h.kind === 'taluka' && !all ? `${col.label}${unitOf(col)} · ` : ''}{axisHint}
             </p>
             <div ref={chartBox} className="modal-chart">
-              <SeriesChart labels={spec.labels} series={spec.series} stacked={spec.stacked} horizontal={spec.horizontal} unit={spec.unit} yMax={timeSeries ? undefined : spec.yMax} />
+              <div className="chart-fill" role="img" aria-label={chartLabel}>
+                <SeriesChart labels={spec.labels} series={spec.series} stacked={spec.stacked} horizontal={spec.horizontal} unit={spec.unit} yMax={timeSeries ? undefined : spec.yMax} />
+              </div>
               {!showAllYears && years.length > 0 && <div className="year-stamp" aria-live="polite">{fy(year)}</div>}
             </div>
           </>

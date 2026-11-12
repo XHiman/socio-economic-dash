@@ -13,6 +13,12 @@ APP_DIR="${APP_DIR:-/opt/socioecon}"
 WEB_DIR="${WEB_DIR:-/var/www/socioecon-site/Dashboard/Socio-Economic}"
 SERVICE="${SERVICE:-socioecon-api}"
 API_PORT="${API_PORT:-3005}"
+# `rsync --delete` empties its target: never let a mistyped variable point it at something broad.
+for v in APP_DIR WEB_DIR; do
+  d="${!v}"
+  case "$d" in /*) ;; *) echo "$v must be an absolute path (got '$d')" >&2; exit 1 ;; esac
+  [ "$(awk -F/ '{print NF-1}' <<<"${d%/}")" -ge 2 ] || { echo "$v ($d) is too shallow to deploy into" >&2; exit 1; }
+done
 trap 'echo "DEPLOY FAILED at line $LINENO - the site is unchanged from the last successful step." >&2' ERR
 
 echo "== 1/5 Build ($REPO)"
