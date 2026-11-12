@@ -16,5 +16,18 @@ export default defineConfig({
       },
     },
   },
-  build: { sourcemap: false },
+  build: {
+    sourcemap: false,
+    // Libraries change rarely: separate chunks stay cached across app releases and download in parallel.
+    rolldownOptions: {
+      output: {
+        advancedChunks: {
+          groups: [
+            { name: 'charts', test: /node_modules[\\/](chart\.js|react-chartjs-2|@kurkle)/ },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
 })

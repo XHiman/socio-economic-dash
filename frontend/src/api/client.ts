@@ -10,7 +10,7 @@ export class ApiError extends Error {
 
 /** Finished responses by path (insertion-ordered, so the oldest is dropped first). */
 const cache = new Map<string, unknown>()
-const CACHE_LIMIT = 200
+const CACHE_LIMIT = 500
 /** Requests still running, so two components asking for the same path share one request. */
 const inflight = new Map<string, Promise<unknown>>()
 
@@ -22,6 +22,17 @@ async function getJson<T>(path: string): Promise<T> {
     throw new ApiError(res.status, message)
   }
   return (await res.json()) as T
+}
+
+/** Store a response obtained elsewhere (e.g. split out of a bulk response) unless that path is already cached. */
+export function seed(path: string, data: unknown): void {
+  if (!cache.has(path)) cache.set(path, data)
+}
+
+/** Fetch into the cache without a component (shares in-flight requests with useApi). */
+export function prefetch<T>(path: string): Promise<T> {
+  const hit = cache.get(path)
+  return hit !== undefined ? Promise.resolve(hit as T) : load<T>(path)
 }
 
 function load<T>(path: string): Promise<T> {

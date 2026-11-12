@@ -4,3 +4,9 @@
 // Currently switched off. To show it again, set this to:
 //   'Data presented in this dashboard is currently available for FY 2020-21 to FY 2024-25 only.'
 export const DATA_DISCLAIMER: string | null = null
+
+/**
+ * Abstract section opened first. The page requests it in parallel with the section list instead of waiting for
+ * the list to learn which one is first; if it is not in the list, the first listed section is used.
+ */
+export const DEFAULT_SECTION_ID = 'people'

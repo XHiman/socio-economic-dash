@@ -140,3 +140,19 @@ export async function stateOverview(db: Db, year: string) {
   );
   return { districts, trend, state: st ?? null };
 }
+
+/** Sector shares of every district plus the state sum, in one query (instead of one per district). */
+export async function sectorMixAll(db: Db, year: string) {
+  const rows = await query<Mix & { district_id: number }>(
+    db,
+    'SELECT district_id, tot_prim AS `primary`, tot_sec AS secondary, tot_third AS tertiary FROM dsa_gddp WHERE src_table = ? AND data_year = ?',
+    [GDDP_SOURCE, year],
+  );
+  const state: Mix = { primary: 0, secondary: 0, tertiary: 0 };
+  const districts: Record<number, Mix> = {};
+  for (const { district_id, ...m } of rows) {
+    districts[district_id] = m;
+    for (const k of ['primary', 'secondary', 'tertiary'] as const) state[k] = (state[k] ?? 0) + (m[k] ?? 0);
+  }
+  return { districts, state };
+}

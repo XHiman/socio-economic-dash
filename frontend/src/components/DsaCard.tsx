@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import type { CardData } from '../api/types'
 import { seriesColor } from '../lib/chart'
 import { fy, num } from '../lib/format'
 import { sameYear } from '../lib/years'
 import { describeValues } from '../lib/a11y'
-import { CardModal } from './CardModal'
 import { Chip, ChipGroup } from './Tabs'
 import { Icon, ICON } from './Modal'
 import { ProfileCard } from './ProfileCard'
@@ -103,6 +102,9 @@ export function CardBody({ card, split }: { card: CardData; split: Split }) {
   )
 }
 
+// The full-screen view (and its chart code) is only needed once someone opens it.
+const CardModal = lazy(() => import('./CardModal').then((m) => ({ default: m.CardModal })))
+
 export function DsaCard({ card, split = 'taluka', historyPath, selectedYear }: {
   card: CardData; split?: Split; historyPath: string; selectedYear: string | null
 }) {
@@ -123,7 +125,11 @@ export function DsaCard({ card, split = 'taluka', historyPath, selectedYear }: {
         </div>
       </header>
       {card.static ? <ProfileCard card={card} /> : <CardBody card={card} split={split} />}
-      {open && !card.static && <CardModal card={card} split={split} historyPath={historyPath} selectedYear={selectedYear} onClose={() => setOpen(false)} />}
+      {open && !card.static && (
+        <Suspense fallback={null}>
+          <CardModal card={card} split={split} historyPath={historyPath} selectedYear={selectedYear} onClose={() => setOpen(false)} />
+        </Suspense>
+      )}
     </section>
   )
 }

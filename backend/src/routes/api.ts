@@ -40,6 +40,7 @@ export function apiRouter(ctx: ApiContext): Router {
   // Cached lookups (bounded key sets: validated ids and slugs only).
   const districtList = new TtlCache<{ id: number; name: string; division?: string }[]>(CACHE_TTL_MS, 2);
   const years = new TtlCache<string[]>(CACHE_TTL_MS, 1);
+  const overviewAll = new TtlCache<unknown>(CACHE_TTL_MS, 16);
   const stateHistories = new TtlCache<CardHistory>(CACHE_TTL_MS, 64);
   const districtHistories = new TtlCache<CardHistory>(CACHE_TTL_MS, 1024);
   const districts = () => districtList.get('all', () => query<{ id: number; name: string }>(db, 'SELECT district_id AS id, name_en AS name FROM dim_district ORDER BY name_en'));
@@ -118,6 +119,22 @@ export function apiRouter(ctx: ApiContext): Router {
     const card = findCard(req.params.cardId);
     await districtExists(districtId);
     res.json(await districtHistory(districtId, card));
+  }));
+
+  // Key figures of every district in one response, so the page can prefetch them and switching districts is instant.
+  r.get('/overview/all', wrap(async (req, res) => {
+    const y = await resolveYear(req.query.year);
+    res.json(await overviewAll.get(y, async () => {
+      const list = await districts();
+      const [mix, overviews] = await Promise.all([
+        gddp.sectorMixAll(db, y),
+        Promise.all(list.map(async (d) => [d.id, await gddp.districtOverview(db, d.id, y)] as const)),
+      ]);
+      return {
+        year: y, state: mix.state,
+        districts: Object.fromEntries(overviews.map(([id, overview]) => [id, { overview, mix: mix.districts[id] ?? null }])),
+      };
+    }));
   }));
 
   r.get('/districts/:id/overview', wrap(async (req, res) => {

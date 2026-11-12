@@ -97,3 +97,8 @@ export function DataDisclaimer() {
     </p>
   )
 }
+
+/** Placeholder with the final content's footprint, so the layout doesn't jump when data arrives. */
+export function Skeleton({ height = '100%', label = 'Loading…' }: { height?: number | string; label?: string }) {
+  return <div className="skeleton" style={{ height }} role="status" aria-label={label} />
+}
