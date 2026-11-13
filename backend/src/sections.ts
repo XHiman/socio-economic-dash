@@ -11,7 +11,7 @@ import type { SchemaCatalog } from './schema.js';
 
 export type CardKind = 'kpis' | 'breakdown' | 'taluka';
 /** How a column combines across districts for the state view. Counts/areas sum; rates and averages are averaged. */
-export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; /** This column is the sum of its siblings; left out of stacked views. */ total?: boolean; /** Averaged across districts weighted by this column of the same table (e.g. population). */ weightBy?: string }
+export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; /** This column is the sum of its siblings; left out of stacked views. */ total?: boolean; /** Digits to show; percentages default to 1 on the client, the sex ratio is a whole number. */ decimals?: number; /** Averaged across districts weighted by this column of the same table (e.g. population). */ weightBy?: string }
 export interface CardDef {
   id: string;
   title: string;
@@ -38,6 +38,7 @@ const REF_ROW = { column: 'reporting_year', value: 'Reference year' };
 const POP = 'area_pop_net_pop';
 /** Rates weighted by population when combined across districts (a plain mean would overstate small districts). */
 const byPop = (col: CardColumn): CardColumn => ({ ...col, weightBy: POP });
+const whole = (col: CardColumn): CardColumn => ({ ...col, decimals: 0 });
 
 export const SECTIONS: SectionDef[] = [
   {
@@ -50,7 +51,7 @@ export const SECTIONS: SectionDef[] = [
         c('area_pop_tot_taluka', 'Talukas'), c('area_pop_vill_pop', 'Inhabited villages'),
         c('area_pop_vill_non_pop', 'Uninhabited villages'), c('area_pop_city', 'Towns & cities'),
         byPop(c('area_pop_prop_urban', 'Urban population', '%')), byPop(c('area_pop_prop_rural', 'Rural population', '%')),
-        byPop(c('area_pop_gen_ratio', 'Sex ratio', 'females per 1,000 males')), byPop(c('lit_tot', 'Literacy rate', '%')),
+        whole(byPop(c('area_pop_gen_ratio', 'Sex ratio', 'females per 1,000 males'))), byPop(c('lit_tot', 'Literacy rate', '%')),
       ] },
       { id: 'literacy', title: 'Literacy rate', table: 'dsa_11a', kind: 'breakdown', rowFilter: REF_ROW, columns: [
         byPop(c('lit_male', 'Male', '%')), byPop(c('lit_female', 'Female', '%')), byPop(c('lit_rural', 'Rural', '%')),

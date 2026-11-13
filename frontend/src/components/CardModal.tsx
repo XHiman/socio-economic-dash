@@ -3,15 +3,20 @@ import type { CardColumn, CardData, CardHistory } from '../api/types'
 import { useApi } from '../api/client'
 import { describeValues } from '../lib/a11y'
 import { exportPng } from '../lib/download'
-import { fy, num } from '../lib/format'
+import { fmt, fy } from '../lib/format'
 import { resolveYearIndex } from '../lib/years'
-import { CardTable, refLabel, stackParts, unitOf, type Split } from './CardTable'
+import { CardTable, refLabel, stackParts, unitLine, unitOf, type Split } from './CardTable'
 import { SeriesChart, type Series } from './charts'
 import { Icon, ICON, Modal } from './Modal'
 import { Chip, ChipGroup, Tab, TabList } from './Tabs'
 import { Empty, ErrorBox, Loading } from './ui'
 
 const clean = (name: string) => name.replace(/ \(synthetic\)$/, '')
+/** The decimals every column agrees on (undefined if they differ or none is set). */
+const sharedDecimals = (cols: CardColumn[]) => {
+  const d = new Set(cols.map((c) => c.decimals))
+  return d.size === 1 ? [...d][0] : undefined
+}
 const sharedUnit = (cols: CardColumn[]) => {
   const u = new Set(cols.map((c) => c.unit ?? ''))
   return u.size === 1 ? [...u][0] || undefined : undefined
@@ -64,10 +69,10 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
       const val = (y: string, c: CardColumn) => h.data[y]?.total?.[c.key] ?? null
       if (!timeSeries) {
         const yMax = Math.max(0, ...keys.flatMap((y) => h.columns.map((c) => val(y, c) ?? 0)))
-        return { stacked: false, horizontal: true, unit: sharedUnit(h.columns), yMax, labels: h.columns.map(lab), series: [{ label: h.title, data: h.columns.map((c) => val(year, c)) }] }
+        return { stacked: false, horizontal: true, unit: sharedUnit(h.columns), yMax, labels: h.columns.map(lab), series: [{ label: h.title, data: h.columns.map((c) => val(year, c)), decimals: sharedDecimals(h.columns) }] }
       }
       const cols = h.stackable ? parts : h.columns
-      return { stacked: h.stackable, horizontal: true, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => val(y, c)) })) }
+      return { stacked: h.stackable, horizontal: true, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => val(y, c)), decimals: c.decimals })) }
     }
     // taluka / district split
     const cols = all ? parts : [col]
@@ -78,22 +83,24 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
       const rows = h.data[year]?.rows ?? []
       return {
         stacked: all, horizontal: false, unit: sharedUnit(cols), yMax, labels: rows.map((r) => clean(r.taluka)),
-        series: cols.map((c) => ({ label: lab(c), data: rows.map((r) => r.values[c.key] ?? null) })),
+        series: cols.map((c) => ({ label: lab(c), data: rows.map((r) => r.values[c.key] ?? null), decimals: c.decimals })),
       }
     }
     if (all) {
-      return { stacked: true, horizontal: false, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => totalOf(y, c.key)) })) }
+      return { stacked: true, horizontal: false, unit: sharedUnit(cols), labels: yearLabels, series: cols.map((c) => ({ label: lab(c), data: keys.map((y) => totalOf(y, c.key)), decimals: c.decimals })) }
     }
     const names = [...new Set(keys.flatMap((y) => (h.data[y]?.rows ?? []).map((r) => r.taluka)))].sort()
     return {
       stacked: false, horizontal: false, unit: col.unit, labels: yearLabels,
-      series: names.map((n) => ({ label: clean(n), data: keys.map((y) => h.data[y]?.rows.find((r) => r.taluka === n)?.values[col.key] ?? null) })),
+      series: names.map((n) => ({ label: clean(n), data: keys.map((y) => h.data[y]?.rows.find((r) => r.taluka === n)?.values[col.key] ?? null), decimals: col.decimals })),
     }
   })()
   const hasSeriesData = !!spec && spec.series.some((x) => x.data.some((v) => v != null))
 
   const slice: CardData = { ...h, year: year || null, total: h.data[year]?.total ?? null, rows: h.data[year]?.rows ?? [] }
   const showAllYears = tab === 'chart' && timeSeries
+  // Unit of what is plotted: the chart's shared unit, else the units of the measures shown (named in the labels).
+  const unitText = spec?.unit ?? undefined
   const ref = refLabel(h.table, showAllYears ? years : [years.length ? year : null])
   const hasData = !!h.data[year]
   const canDownload = tab === 'chart' && !!spec
@@ -107,7 +114,7 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
   }
   const download = () => {
     const stamp = showAllYears ? '' : years.length ? ` - ${fy(year)}` : ''
-    void exportPng([...(chartBox.current?.querySelectorAll('canvas') ?? [])], { title: `${h.title}${stamp}`, reference: ref })
+    void exportPng([...(chartBox.current?.querySelectorAll('canvas') ?? [])], { title: `${h.title}${stamp}`, subtitle: unitText ? `Unit: ${unitText}` : undefined, reference: ref })
   }
 
   const axisHint = h.kind === 'breakdown'
@@ -123,7 +130,7 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
 
   const chartLabel = spec
     ? `${h.title}. ${axisHint}. ${spec.series.length === 1
-      ? describeValues(spec.labels, spec.series[0]!.data, spec.unit)
+      ? describeValues(spec.labels, spec.series[0]!.data, spec.unit, (v) => fmt(v, { unit: spec.unit, decimals: spec.series[0]!.decimals }))
       : `${spec.series.length} series. Open the Data table tab for the values.`}`
     : h.title
 
@@ -168,7 +175,7 @@ function Viewer({ h, split, selectedYear }: { h: CardHistory; split: Split; sele
             {h.columns.map((c) => (
               <div key={c.key} className="stat">
                 <dt>{c.label}</dt>
-                <dd>{num(slice.total?.[c.key])}</dd>
+                <dd>{fmt(slice.total?.[c.key], c)}</dd>
                 {c.unit && <div className="unit-line">{c.unit}</div>}
               </div>
             ))}
@@ -199,7 +206,7 @@ export function CardModal({ card, split, historyPath, selectedYear, onClose }: {
 }) {
   const hist = useApi<CardHistory>(historyPath)
   return (
-    <Modal title={card.title} subtitle={refLabel(card.table, [])} onClose={onClose}>
+    <Modal title={card.title} subtitle={[refLabel(card.table, []), unitLine(card)].filter(Boolean).join(' · ')} onClose={onClose}>
       {hist.error ? <ErrorBox message={hist.error} /> : !hist.data ? <Loading /> : <Viewer h={hist.data} split={split} selectedYear={selectedYear} />}
     </Modal>
   )

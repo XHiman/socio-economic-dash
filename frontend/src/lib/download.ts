@@ -21,13 +21,13 @@ const FONT = "system-ui, 'Segoe UI', sans-serif"
  * MITRA watermark, and download it.
  */
 export async function exportPng(
-  canvases: HTMLCanvasElement[], opts: { title: string; reference?: string; legend?: LegendItem[] },
+  canvases: HTMLCanvasElement[], opts: { title: string; subtitle?: string; reference?: string; legend?: LegendItem[] },
 ): Promise<void> {
   if (!canvases.length) return
   const first = canvases[0]!
   const k = Math.max(1, first.width / (first.clientWidth || first.width)) // device-pixel ratio of the live chart
   const captions = canvases.map((c) => c.closest('figure')?.querySelector('figcaption')?.textContent ?? '')
-  const pad = 20 * k, gap = 24 * k, headH = 44 * k, footH = 48 * k
+  const pad = 20 * k, gap = 24 * k, headH = (opts.subtitle ? 60 : 44) * k, footH = 48 * k
   const capH = captions.some(Boolean) ? 28 * k : 0
   const legH = opts.legend?.length ? 32 * k : 0
   const chartH = Math.max(...canvases.map((c) => c.height))
@@ -43,7 +43,13 @@ export async function exportPng(
 
   ctx.fillStyle = '#0f172a'
   ctx.font = `700 ${18 * k}px ${FONT}`
-  ctx.fillText(opts.title, pad, pad / 2 + headH / 2)
+  const titleY = opts.subtitle ? pad / 2 + headH / 2 - 9 * k : pad / 2 + headH / 2
+  ctx.fillText(opts.title, pad, titleY)
+  if (opts.subtitle) {
+    ctx.fillStyle = '#475569'
+    ctx.font = `${13 * k}px ${FONT}`
+    ctx.fillText(opts.subtitle, pad, titleY + 22 * k)
+  }
 
   let x = pad
   canvases.forEach((c, i) => {

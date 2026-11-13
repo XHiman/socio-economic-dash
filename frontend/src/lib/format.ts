@@ -18,8 +18,32 @@ export function crore(v: number | null | undefined): string {
   return `₹${num(v, 0)} Cr`
 }
 
-export function pct(v: number | null | undefined, frac = 2): string {
-  return v === null || v === undefined ? dash : `${num(v, frac)}%`
+/** Exactly `d` decimals (12 -> "12.0" for d = 1), unlike num() which only caps them. */
+export function fixed(v: number | null | undefined, d: number): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return dash
+  return v.toLocaleString(IN, { minimumFractionDigits: d, maximumFractionDigits: d })
+}
+
+/** Percentages are always shown with exactly one decimal. Display only: stored values are untouched. */
+export function pct(v: number | null | undefined, frac = 1): string {
+  return v === null || v === undefined ? dash : `${fixed(v, frac)}%`
+}
+
+/** What decides how a measure is printed: its unit and, when the data owner fixes it, its number of decimals. */
+export interface ValueFormat { unit?: string; decimals?: number }
+
+/** Digits to show: the measure's own `decimals`, else 1 for percentages, else undefined (natural, up to 2). */
+export const decimalsOf = (f?: ValueFormat): number | undefined => f?.decimals ?? (f?.unit === '%' ? 1 : undefined)
+
+/** Format a measure's value consistently everywhere (cards, tables, tooltips, labels, exports). */
+export function fmt(v: number | null | undefined, f?: ValueFormat): string {
+  const d = decimalsOf(f)
+  return d === undefined ? num(v) : fixed(v, d)
+}
+
+/** "12.5" + "%" -> "12.5%"; "3,000" + "km" -> "3,000 km"; no unit -> unchanged. */
+export function withUnit(text: string, unit?: string): string {
+  return !unit ? text : unit === '%' ? `${text}%` : `${text} ${unit}`
 }
 
 /** '2023_24' -> '2023-24' */

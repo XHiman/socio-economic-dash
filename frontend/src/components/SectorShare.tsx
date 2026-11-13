@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { SectorMixResponse } from '../api/types'
 import { sectorColors } from '../lib/chart'
-import { fy, num } from '../lib/format'
+import { fixed, fy } from '../lib/format'
 import { DoughnutChart } from './charts'
 import { ChartPanel, ICON, Icon } from './Modal'
 
@@ -15,7 +15,7 @@ export function describeSectorMix(mix: SectorMixResponse, districtName: string |
   const text = (name: string, m: SectorMixResponse['district']) => {
     const v = shares(m)
     const total = v.reduce<number>((a, x) => a + (x ?? 0), 0)
-    return total ? `${name}: ${LABELS.map((l, i) => `${l} ${num(((v[i] ?? 0) / total) * 100, 1)}%`).join(', ')}.` : `${name}: no data.`
+    return total ? `${name}: ${LABELS.map((l, i) => `${l} ${fixed(((v[i] ?? 0) / total) * 100, 1)}%`).join(', ')}.` : `${name}: no data.`
   }
   return [text('Maharashtra', mix.state), districtName ? text(districtName, mix.district) : ''].filter(Boolean).join(' ')
 }

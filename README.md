@@ -9,8 +9,7 @@ db/         schema, dev users, production read-only-user script
 deploy/     Apache + systemd samples for the VM
 ```
 
-Pages: **State** (GSDP, divisions, district ranking), **Districts** (KPIs, GDDP trend, sector mix vs state,
-division comparison, DSA sections), **Data explorer** (any `dsa_*` table, district/taluka level, CSV export).
+Pages: **Dashboard** (Maharashtra or any district: key figures, GDDP trend, sector share / state profile and the Statistical Abstract; every chart has a full-screen view with data labels, a data table, a time-series view and PNG download), **Print abstract** (`/print/<state|district id>?year=YYYY-YY`: a stand-alone A4 document of the whole abstract with units, source references, running header/footer and page numbers; opened from the Abstract's "Print abstract" button), and **Data explorer** (any `dsa_*` table, district/taluka level, CSV export).
 
 ## Local development
 

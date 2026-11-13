@@ -1,15 +1,16 @@
 import type { CardData } from '../api/types'
-import { num } from '../lib/format'
+import { fixed, fmt, num } from '../lib/format'
 
 /** Profile card body (state or district): grouped figures plus an urban / rural split. Used by static cards. */
 export function ProfileCard({ card }: { card: CardData }) {
   const total = card.total ?? {}
-  const unit = (key: string) => card.columns.find((c) => c.key === key)?.unit
+  const column = (key: string) => card.columns.find((c) => c.key === key)
+  const unit = (key: string) => column(key)?.unit
   const tile = (key: string, label: string, hint?: string) => (
     <div className="profile-tile" key={key}>
       <dt>{label}</dt>
       <dd>
-        {num(total[key], key === 'area_pop_gen_ratio' || key === 'lit_tot' ? 1 : 2)}
+        {fmt(total[key], column(key))}
         {unit(key) && unit(key)!.length <= 2 && <span className="unit">{unit(key)}</span>}
       </dd>
       {unit(key) && unit(key)!.length > 2 && <div className="unit-line">{unit(key)}</div>}
@@ -49,14 +50,14 @@ export function ProfileCard({ card }: { card: CardData }) {
           <h4 id="profile-split">Urban / rural population</h4>
           <div
             className="split-bar" role="img"
-            aria-label={`${num(urban, 1)}% urban, ${num(rural, 1)}% rural`}
+            aria-label={`${fixed(urban, 1)}% urban, ${fixed(rural, 1)}% rural`}
           >
             {urbanWidth > 0 && <span className="urban" style={{ width: `${urbanWidth}%` }} />}
             {urbanWidth < 100 && <span className="rural" />}
           </div>
           <ul className="split-legend">
-            <li><i className="urban" />Urban {num(urban, 1)}%</li>
-            <li><i className="rural" />Rural {num(rural, 1)}%</li>
+            <li><i className="urban" />Urban {fixed(urban, 1)}%</li>
+            <li><i className="rural" />Rural {fixed(rural, 1)}%</li>
           </ul>
         </section>
       )}

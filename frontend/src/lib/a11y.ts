@@ -1,13 +1,12 @@
-import { num } from './format'
+import { fmt, num, withUnit } from './format'
 
 /** Text alternative for a bar-style chart: how many values, and the highest and lowest. */
-export function describeValues(labels: string[], values: (number | null)[], unit?: string): string {
+export function describeValues(labels: string[], values: (number | null)[], unit?: string, format: (v: number) => string = (v) => fmt(v, { unit })): string {
   const pts = values.flatMap((v, i) => (v === null ? [] : [{ label: labels[i] ?? '', v }]))
   if (!pts.length) return 'No data.'
   const hi = pts.reduce((a, b) => (b.v > a.v ? b : a))
   const lo = pts.reduce((a, b) => (b.v < a.v ? b : a))
-  const u = unit ? ` ${unit}` : ''
-  return `${pts.length} values. Highest: ${hi.label}, ${num(hi.v)}${u}. Lowest: ${lo.label}, ${num(lo.v)}${u}.`
+  return `${pts.length} values. Highest: ${hi.label}, ${withUnit(format(hi.v), unit)}. Lowest: ${lo.label}, ${withUnit(format(lo.v), unit)}.`
 }
 
 /** Text alternative for a time series: first and last point and the peak. */

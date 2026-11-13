@@ -1,0 +1,122 @@
+/*
+ * Stand-alone printable abstract. On screen it previews as an A4 sheet; in print the browser's page box takes over.
+ * Colours follow the dashboard: navy (primary), amber (accent), teal (secondary).
+ */
+.print-doc {
+  --p-navy: #1e3a8a; --p-amber: #f59e0b; --p-teal: #0f766e; --p-ink: #111827; --p-muted: #4b5563; --p-line: #b9c1ce; --p-tint: #f3f6fb;
+  background: #e3e7ee; min-height: 100vh; padding: 1rem 0 3rem; color: var(--p-ink);
+  font-family: Georgia, 'Times New Roman', serif; font-size: 10pt; line-height: 1.45;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.print-doc h1, .print-doc h2, .print-doc h3, .print-doc table, .print-doc .print-meta, .print-doc .print-toolbar,
+.print-doc .print-tile, .print-doc .print-facts, .print-doc figcaption { font-family: var(--sans); }
+
+.print-toolbar { width: 210mm; max-width: 100%; margin: 0 auto 0.75rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: #374151; padding-inline: 0.25rem; }
+.print-toolbar-actions { display: flex; gap: 0.5rem; }
+.btn-quiet { background: #fff; color: var(--text); border: 1px solid #cbd5e1; }
+
+.print-page { width: 210mm; max-width: 100%; margin: 0 auto; background: #fff; padding: 12mm 15mm; box-shadow: 0 2px 12px rgb(15 23 42 / 18%); box-sizing: border-box; display: table; border-collapse: collapse; padding: 0; }
+.print-frame > thead > tr > td, .print-frame > tfoot > tr > td, .print-frame > tbody > tr > td { padding: 0 15mm; border: 0; }
+.print-frame > thead > tr > td { padding-top: 12mm; }
+.print-frame > tfoot > tr > td { padding-bottom: 12mm; }
+.print-frame > thead { display: table-header-group; }
+.print-frame > tfoot { display: table-footer-group; }
+.print-running-head { display: flex; justify-content: space-between; gap: 1rem; font: 7.5pt var(--sans); color: var(--p-muted); padding-bottom: 1.5mm; margin-bottom: 5mm; border-bottom: 0.5pt solid var(--p-line); }
+.print-running-foot { font: 7.5pt var(--sans); color: var(--p-muted); padding-top: 1.5mm; margin-top: 4mm; border-top: 0.5pt solid var(--p-line); max-width: 135mm; }
+
+/* ---- Cover ---- */
+.print-cover { display: flex; flex-direction: column; min-height: 238mm; }
+.print-masthead { display: flex; align-items: center; justify-content: space-between; gap: 6mm; }
+.print-masthead img { height: 62px; width: auto; }
+.print-masthead > div { text-align: center; flex: 1; }
+.print-org { font: 700 14pt var(--sans); letter-spacing: 0.06em; text-transform: uppercase; margin: 0; }
+.print-org-sub { font-size: 9.5pt; color: var(--p-muted); margin: 0.5mm 0 0; }
+.print-rule { height: 0; border-top: 2.5pt solid var(--p-navy); border-bottom: 1pt solid var(--p-amber); padding-top: 1pt; margin: 5mm 0 14mm; }
+.print-kicker { font: 600 9pt var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--p-teal); margin: 0 0 2mm; text-align: center; }
+.print-cover h1 { font-size: 31pt; line-height: 1.1; margin: 0; color: var(--p-navy); text-align: center; letter-spacing: -0.01em; }
+.print-district { font: 700 24pt var(--sans); margin: 3mm 0 4mm; text-align: center; }
+.print-fy { text-align: center; margin: 0 0 8mm; }
+.print-fy span { display: inline-block; background: var(--p-navy); color: #fff; font: 600 10pt var(--sans); letter-spacing: 0.06em; padding: 1.4mm 6mm; border-radius: 99px; }
+.print-facts { display: grid; grid-template-columns: max-content max-content; justify-content: center; gap: 1mm 6mm; margin: 0 0 10mm; font-size: 9.5pt; text-align: left; }
+.print-facts dt { color: var(--p-muted); }
+.print-facts dd { margin: 0; font-weight: 600; }
+
+.print-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3.5mm; margin-bottom: 10mm; }
+.print-tile { background: var(--p-tint); border-top: 2.5pt solid var(--p-navy); padding: 3mm 3.5mm; border-radius: 0 0 1.5mm 1.5mm; display: flex; flex-direction: column; gap: 0.6mm; }
+.print-tile:nth-child(even) { border-top-color: var(--p-teal); }
+.print-tile-label { font-size: 7pt; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--p-muted); }
+.print-tile strong { font-size: 16pt; line-height: 1.15; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.print-tile em { font-style: normal; font-size: 7.5pt; color: var(--p-muted); }
+
+.print-cover-foot { margin-top: auto; display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 8mm; align-items: start; font-family: var(--sans); }
+.print-cover-foot h2 { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.12em; color: var(--p-muted); margin: 0 0 1.5mm; }
+.print-contents { display: block; }
+.print-contents ol { margin: 0; padding-left: 5mm; font-size: 9.5pt; line-height: 1.6; }
+.print-about ul { margin: 0; padding-left: 4mm; font-size: 8pt; color: var(--p-muted); line-height: 1.45; }
+.print-about li { margin-bottom: 1mm; }
+
+/* ---- Sections ---- */
+.print-section { margin-top: 8mm; }
+.print-section-head { display: flex; align-items: center; gap: 4mm; padding-bottom: 2.5mm; margin-bottom: 4mm; border-bottom: 1pt solid var(--p-navy); break-after: avoid; }
+.print-badge { flex: none; width: 9mm; height: 9mm; border-radius: 50%; background: var(--p-navy); color: #fff; font: 700 12pt var(--sans); display: grid; place-items: center; }
+.print-section-head h2 { font-size: 17pt; line-height: 1.15; color: var(--p-navy); margin: 0; }
+.print-lead { color: var(--p-muted); font-size: 9.5pt; margin: 0.5mm 0 0; }
+.print-h3, .print-section h3 { font-size: 11pt; margin: 5mm 0 0.5mm; break-after: avoid; }
+
+.print-callout { background: var(--p-tint); border-left: 3pt solid var(--p-amber); padding: 3.5mm 5mm; margin-bottom: 5mm; break-inside: avoid; }
+.print-callout h3 { margin: 0 0 1.5mm; font-size: 8pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--p-muted); }
+.print-insights { margin: 0; padding: 0; list-style: none; }
+.print-insights li { position: relative; padding-left: 4.5mm; margin-bottom: 1.4mm; font-size: 9.5pt; line-height: 1.45; }
+.print-insights li::before { content: ''; position: absolute; left: 0.5mm; top: 1.6mm; width: 1.6mm; height: 1.6mm; background: var(--p-navy); transform: rotate(45deg); }
+
+.print-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-bottom: 3mm; }
+.print-fig { margin: 0 0 4mm; break-inside: avoid; }
+.print-fig figcaption { font-size: 8.5pt; font-weight: 700; color: var(--p-ink); margin-bottom: 1mm; padding-bottom: 1mm; border-bottom: 0.5pt solid var(--p-line); }
+.print-chart { position: relative; width: 100%; margin: 1mm 0 2mm; break-inside: avoid; }
+
+/* ---- Cards ---- */
+.print-card { margin-top: 6mm; break-inside: avoid-page; }
+.print-card > header { border-left: 3pt solid var(--p-teal); padding-left: 3mm; margin-bottom: 2mm; break-after: avoid; }
+.print-card h3 { margin: 0; font-size: 11.5pt; color: var(--p-navy); }
+.print-meta { font-size: 8pt; color: var(--p-muted); margin: 0.5mm 0 0; letter-spacing: 0.01em; break-after: avoid; }
+.print-notes { margin: 0 0 2mm; padding: 1.5mm 3mm; list-style: none; background: var(--p-tint); border-radius: 1mm; font-size: 8.8pt; color: #1f2937; break-after: avoid; }
+.print-notes li { position: relative; padding-left: 3.5mm; margin: 0.4mm 0; }
+.print-notes li::before { content: '›'; position: absolute; left: 0.5mm; color: var(--p-teal); font-weight: 700; }
+
+/* ---- Tables (content tables only; the outer frame is a table too) ---- */
+.print-doc table:not(.print-frame) { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 1mm 0 3mm; }
+.print-doc table:not(.print-frame) th, .print-doc table:not(.print-frame) td { padding: 1.4pt 5pt; border: 0.5pt solid var(--p-line); text-align: left; position: static; white-space: normal; }
+.print-doc table:not(.print-frame) thead { display: table-header-group; }
+.print-doc table:not(.print-frame) thead th { background: #e4e9f3; color: #172554; font-weight: 700; }
+.print-doc table:not(.print-frame) tbody tr:nth-child(even) > * { background: #f8fafd; }
+.print-doc table:not(.print-frame) tbody th { font-weight: 500; }
+.print-doc table:not(.print-frame) tr { break-inside: avoid; }
+.print-doc table:not(.print-frame) .num { text-align: right; font-variant-numeric: tabular-nums; }
+.print-doc table:not(.print-frame) tr.total > * { font-weight: 700; background: #e9eef7; border-top: 1pt solid var(--p-navy); }
+.print-doc table:not(.print-frame) tr.compare > * { background: #fff7e6; font-style: italic; }
+.print-doc table:not(.print-frame) tr.compare + tr.compare > * { font-style: normal; font-weight: 600; }
+.print-doc .table-wrap { overflow: visible; }
+.print-years { font-size: 8pt !important; }
+.print-years th, .print-years td { text-align: right; }
+.print-years th:first-child { text-align: left; }
+
+.print-end { margin-top: 10mm; padding-top: 2mm; border-top: 0.5pt solid var(--p-line); font-family: var(--sans); font-size: 8pt; color: var(--p-muted); }
+.print-end p { margin: 0 0 1mm; }
+.print-error { padding: 2rem; font-family: var(--sans); }
+
+@page {
+  size: A4;
+  margin: 12mm 15mm 16mm;
+  /* Page numbers where the browser supports margin boxes (Chrome / Edge 131+). */
+  @bottom-right { content: 'Page ' counter(page) ' of ' counter(pages); font: 8pt system-ui, sans-serif; color: #4b5563; }
+}
+
+@media print {
+  html, body { background: #fff; }
+  .print-doc { background: #fff; padding: 0; font-size: 10pt; }
+  .print-toolbar { display: none; }
+  .print-page { width: 100%; max-width: none; margin: 0; padding: 0; box-shadow: none; }
+  .print-frame > thead > tr > td, .print-frame > tfoot > tr > td, .print-frame > tbody > tr > td { padding: 0; }
+  .print-section { break-before: page; margin-top: 0; }
+  .print-cover { min-height: 232mm; }
+}

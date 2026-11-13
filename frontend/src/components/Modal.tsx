@@ -9,6 +9,7 @@ export const ICON = {
   flip: 'M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   close: 'M18 6L6 18M6 6l12 12',
+  print: 'M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2M7 14h10v7H7z',
   expand: 'M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7',
 }
 
@@ -81,8 +82,10 @@ export function Modal({ title, subtitle, onClose, children }: { title: string; s
  * Toolbar + chart area for an expanded chart. Download stitches every canvas inside onto a white, watermarked PNG.
  * `description` is the text alternative announced for the chart.
  */
-export function ChartPanel({ title, description, reference, legend, tabs, tools, canDownload = true, plain = false, children }: {
+export function ChartPanel({ title, description, unit, reference, legend, tabs, tools, canDownload = true, plain = false, children }: {
   title: string
+  /** Unit of the measure; printed under the title of the downloaded image. */
+  unit?: string
   description?: string
   reference?: string
   legend?: LegendItem[]
@@ -95,7 +98,7 @@ export function ChartPanel({ title, description, reference, legend, tabs, tools,
   children: ReactNode
 }) {
   const box = useRef<HTMLDivElement>(null)
-  const download = () => { void exportPng([...(box.current?.querySelectorAll('canvas') ?? [])], { title, reference, legend }) }
+  const download = () => { void exportPng([...(box.current?.querySelectorAll('canvas') ?? [])], { title, subtitle: unit ? `Unit: ${unit}` : undefined, reference, legend }) }
   return (
     <>
       <div className="modal-bar">

@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi } from '../api/client'
 import type { SectionResponse, SectionSummary } from '../api/types'
 import { DsaCard } from './DsaCard'
 import { Masonry } from './Masonry'
+import { Icon, ICON } from './Modal'
 import { Tab, TabList } from './Tabs'
 import { DEFAULT_SECTION_ID } from '../config'
 import { ErrorBox, Skeleton } from './ui'
@@ -24,7 +26,13 @@ export function DsaSections({ districtId, year, yearQuery }: { districtId: numbe
 
   return (
     <section aria-labelledby="dsa-heading" className="dsa">
-      <h2 id="dsa-heading">{districtId === null ? 'State' : 'District'} Statistical Abstract</h2>
+      <div className="dsa-head">
+        <h2 id="dsa-heading">{districtId === null ? 'State' : 'District'} Statistical Abstract</h2>
+        {/* Opens the stand-alone print version (all sections, whatever is expanded here) in its own tab. */}
+        <Link className="btn-tool" to={`/print/${districtId ?? 'state'}${yearQuery ? `${yearQuery}&` : '?'}autoprint=1`} target="_blank" rel="noopener">
+          <Icon d={ICON.print} />Print abstract
+        </Link>
+      </div>
       <TabList label="Abstract sections">
         {(list ?? []).map((s) => (
           <Tab key={s.id} id={`tab-${s.id}`} controls="dsa-panel" selected={s.id === active} onSelect={() => setChosen(s.id)}>{s.title}</Tab>

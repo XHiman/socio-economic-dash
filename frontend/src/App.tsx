@@ -4,6 +4,7 @@ import { DataDisclaimer, Loading } from './components/ui'
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ExplorerPage = lazy(() => import('./pages/ExplorerPage'))
+const PrintPage = lazy(() => import('./pages/PrintPage'))
 
 /**
  * "Dashboard" with a "Data explorer" submenu. Opens on hover or keyboard focus (CSS), and on tap/click of the
@@ -87,7 +88,11 @@ function Shell() {
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-      <Shell />
+      <Routes>
+        {/* The printable abstract is a document of its own: no site header, navigation or footer. */}
+        <Route path="/print/:id" element={<Suspense fallback={<Loading />}><PrintPage /></Suspense>} />
+        <Route path="*" element={<Shell />} />
+      </Routes>
     </BrowserRouter>
   )
 }

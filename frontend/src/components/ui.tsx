@@ -52,7 +52,7 @@ export function ChartCard({ title, subtitle, children, height = 320, className =
   const body = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
 
-  const download = () => { void exportPng([...(body.current?.querySelectorAll('canvas') ?? [])], { title, legend }) }
+  const download = () => { void exportPng([...(body.current?.querySelectorAll('canvas') ?? [])], { title, subtitle, legend }) }
 
   return (
     <section className={`card ${className}`}>

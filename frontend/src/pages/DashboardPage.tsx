@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useApi } from '../api/client'
 import { prefetchDistrictData } from '../api/prefetch'
-import type { District, Meta, OverviewResponse, SectionResponse, SectorMixResponse, SeriesResponse, StateResponse, StateRow } from '../api/types'
+import type { District, Meta, OverviewResponse, SectionResponse, SectorMixResponse, SeriesResponse, StateResponse } from '../api/types'
 import { LineChart } from '../components/charts'
 import { DsaSections } from '../components/DsaSections'
 import { ProfileCard } from '../components/ProfileCard'
@@ -11,7 +11,7 @@ import { ChartCard, Empty, ErrorBox, Kpi, Skeleton } from '../components/ui'
 import { DEFAULT_SECTION_ID } from '../config'
 import { describeTrend } from '../lib/a11y'
 import { seriesColor } from '../lib/chart'
-import { crore, fy, inr, num, pct } from '../lib/format'
+import { crore, fy, inr, pct } from '../lib/format'
 import { sameYear } from '../lib/years'
 
 // Full-screen GDDP views load on demand.
@@ -34,6 +34,7 @@ export default function DashboardPage() {
   // latest, so they can start immediately instead of waiting for /meta to say which year that is.
   const year = pickedYear ?? meta.data?.latestYear ?? null
   const yq = pickedYear ? `?year=${pickedYear}` : ''
+  const metricUnit = (key: string) => meta.data?.metrics[key]?.unit
   const district = isState ? undefined : districts.data?.find((d) => d.id === districtId)
 
   const overview = useApi<OverviewResponse>(!isState && validId ? `/districts/${districtId}/overview${yq}` : null)
@@ -67,9 +68,6 @@ export default function DashboardPage() {
     const prev = stateTrend[i - 1]?.gddp
     return i > 0 && cur != null && prev ? Math.round((cur / prev - 1) * 10000) / 100 : null
   })()
-  const statePop = st ? st.districts.reduce((a, d) => a + (d.combinedWithOther ? 0 : d.pop ?? 0), 0) : null
-  const fastest = st?.districts.reduce<StateRow | null>(
-    (best, d) => (d.perc_lastyr !== null && (!best || d.perc_lastyr > (best.perc_lastyr ?? -Infinity)) ? d : best), null)
   const growth = isState ? stateGrowth : o?.perc_lastyr
   const mapSrc = district ? `${import.meta.env.BASE_URL}maps/${slugOf(district.name)}.svg` : ''
   const loadError = isState ? stateData.error : overview.error
@@ -109,7 +107,7 @@ export default function DashboardPage() {
 
       {loadError && <ErrorBox message={loadError} />}
       {gddpYear && year && !sameYear(gddpYear, year) && (
-        <p className="note">GDDP estimates for {fy(year)} are not up yet, so GDDP, income, population and sector figures show {fy(gddpYear)}. DSA Data Available only for FY 2020-21 to FY 2024-25</p>
+        <p className="note">GDDP estimates for {fy(year)} are not up yet, so GDDP, income and sector figures show {fy(gddpYear)}. DSA Data Available only for FY 2020-21 to FY 2024-25</p>
       )}
       <h2 className="sr-only">Key figures</h2>
       <div className="kpis">
@@ -121,15 +119,13 @@ export default function DashboardPage() {
         )}
         {isState ? (
           <>
-            <Kpi label="GSDP (nominal)" value={crore(st?.state?.state)} hint="₹ crore" />
-            <Kpi label="Per capita income" value={inr(st?.state?.per_cap_state)} hint="₹ per annum" />
-            <Kpi label="Largest district economy" value={st?.districts[0]?.name ?? ''} hint={crore(st?.districts[0]?.dist)} />
-            <Kpi label="Fastest-growing district" value={fastest?.name ?? ''} hint={fastest ? `${pct(fastest.perc_lastyr)} over previous year` : undefined} tone="up" />
+            <Kpi label="GSDP (nominal)" value={crore(st?.state?.state)} hint={metricUnit('dist')} />
+            <Kpi label="Per capita income" value={inr(st?.state?.per_cap_state)} hint={metricUnit('per_cap_dist')} />
           </>
         ) : (
           <>
-            <Kpi label="GDDP (nominal)" value={crore(o?.dist)} hint={o?.gddp_rank ? `Rank ${o.gddp_rank} of ${o.district_count}` : undefined} />
-            <Kpi label="Per capita income" value={inr(o?.per_cap_dist)} hint={o?.per_cap_state ? `State: ${inr(o.per_cap_state)}` : '₹ per annum'} />
+            <Kpi label="GDDP (nominal)" value={crore(o?.dist)} hint={[metricUnit('dist'), o?.gddp_rank ? `Rank ${o.gddp_rank} of ${o.district_count}` : null].filter(Boolean).join(' · ') || undefined} />
+            <Kpi label="Per capita income" value={inr(o?.per_cap_dist)} hint={[metricUnit('per_cap_dist'), o?.per_cap_state ? `State: ${inr(o.per_cap_state)}` : null].filter(Boolean).join(' · ') || undefined} />
             <Kpi label="Share in state GSDP" value={pct(o?.perc_dis_state)} />
           </>
         )}
@@ -138,35 +134,34 @@ export default function DashboardPage() {
           hint={growth === null || growth === undefined ? undefined : growth >= 0 ? '▲ nominal' : '▼ nominal'}
           tone={growth === null || growth === undefined ? undefined : growth >= 0 ? 'up' : 'down'}
         />
-        <Kpi label="Population" value={num(isState ? statePop : o?.pop, 0)} hint="persons" />
       </div>
 
       <h2 className="sr-only">Economy and profile</h2>
       <div className="grid-2">
         <ChartCard
           key={params.id ?? 'state'}
-          title={isState ? 'Nominal GSDP of Maharashtra' : `Nominal GDDP of ${name}`} subtitle="₹ crore"
+          title={isState ? 'Nominal GSDP of Maharashtra' : `Nominal GDDP of ${name}`} subtitle={metricUnit('dist') ? `Unit: ${metricUnit('dist')}` : undefined}
           description={isState
             ? (st ? describeTrend(stateTrend.map((t) => fy(t.year)), stateTrend.map((t) => t.gddp), crore) : undefined)
             : (trend.data ? describeTrend(trend.data.years.map(fy), trend.data.series[0]?.values ?? [], crore) : undefined)}
           expanded={() => (
             <Suspense fallback={<Skeleton height={320} />}>
               {isState
-                ? (st ? <StateGddpExpanded state={st} /> : <Skeleton height={320} />)
-                : (district && districts.data ? <DistrictGddpExpanded district={district} districts={districts.data} trend={trend.data} /> : <Skeleton height={320} />)}
+                ? (st ? <StateGddpExpanded state={st} unit={metricUnit('dist')} /> : <Skeleton height={320} />)
+                : (district && districts.data ? <DistrictGddpExpanded district={district} districts={districts.data} trend={trend.data} unit={metricUnit('dist')} /> : <Skeleton height={320} />)}
             </Suspense>
           )}
         >
           {isState ? (
             stateData.error ? <ErrorBox message={stateData.error} /> : !st ? <Skeleton /> : (
               <LineChart
-                labels={stateTrend.map((t) => fy(t.year))} yTitle="GSDP (₹ crore)" format={(v) => crore(v)}
+                labels={stateTrend.map((t) => fy(t.year))} yTitle={metricUnit('dist')} format={(v) => crore(v)}
                 series={[{ label: name, data: stateTrend.map((t) => t.gddp), color: seriesColor(1), emphasis: true }]}
               />
             )
           ) : trend.error ? <ErrorBox message={trend.error} /> : !trend.data ? <Skeleton /> : (
             <LineChart
-              labels={trend.data.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
+              labels={trend.data.years.map(fy)} yTitle={metricUnit('dist')} format={(v) => crore(v)}
               series={[{ label: name, data: trend.data.series[0]?.values ?? [], color: seriesColor(1), emphasis: true }]}
             />
           )}
@@ -178,7 +173,7 @@ export default function DashboardPage() {
           </section>
         ) : (
         <ChartCard
-          title={`Sector share – ${fy(mix.data?.year ?? year)}`} subtitle="Share of GVA by sector (%)" legend={sectorLegend()}
+          title={`Sector share – ${fy(mix.data?.year ?? year)}`} subtitle={`Share of GVA by sector · Unit: ${metricUnit('perc_dis_state') ?? '%'}`} legend={sectorLegend()}
           description={mix.data ? describeSectorMix(mix.data, name) : undefined}
           expanded={() => (mix.data ? <SectorExpanded mix={mix.data} districtName={name} year={year} /> : <Skeleton height={320} />)}
         >

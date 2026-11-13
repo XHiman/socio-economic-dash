@@ -13,7 +13,7 @@ import { ErrorBox, Loading } from './ui'
 const REFERENCE = 'District Domestic Product estimates (dsa_gddp), nominal'
 
 /** Full-screen view of a district's GDDP: its own trend, or all districts in its division. */
-export function DistrictGddpExpanded({ district, districts, trend }: { district: District; districts: District[]; trend: SeriesResponse | null }) {
+export function DistrictGddpExpanded({ district, districts, trend, unit }: { district: District; districts: District[]; trend: SeriesResponse | null; unit?: string }) {
   const [tab, setTab] = useState<'self' | 'division'>('self')
   const peers = districts.filter((d) => d.division === district.division)
   const compare = useApi<SeriesResponse>(tab === 'division' ? `/gddp/series?districts=${peers.map((p) => p.id).join(',')}&metric=dist` : null)
@@ -21,8 +21,8 @@ export function DistrictGddpExpanded({ district, districts, trend }: { district:
   const title = tab === 'self' ? `Nominal GDDP of ${district.name}` : `Nominal GDDP – districts within ${district.division} division`
   return (
     <ChartPanel
-      title={title} reference={REFERENCE}
-      description={tab === 'self' && trend ? describeTrend(trend.years.map(fy), trend.series[0]?.values ?? [], crore) : `Lines for ${peers.length} districts. Values are in ₹ crore.`}
+      title={title} reference={REFERENCE} unit={unit}
+      description={tab === 'self' && trend ? describeTrend(trend.years.map(fy), trend.series[0]?.values ?? [], crore) : `Lines for ${peers.length} districts.${unit ? ` Values are in ${unit}.` : ''}`}
       tabs={(
         <TabList label="GDDP view">
           <Tab selected={tab === 'self'} onSelect={() => setTab('self')}>{district.name}</Tab>
@@ -33,13 +33,13 @@ export function DistrictGddpExpanded({ district, districts, trend }: { district:
       {tab === 'self' ? (
         !trend ? <Loading /> : (
           <LineChart
-            labels={trend.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
+            labels={trend.years.map(fy)} yTitle={unit} showValues labelFormat={(v) => num(v, 0)} format={(v) => crore(v)}
             series={[{ label: district.name, data: trend.series[0]?.values ?? [], color: seriesColor(1), emphasis: true }]}
           />
         )
       ) : compare.error ? <ErrorBox message={compare.error} /> : !compare.data ? <Loading /> : (
         <LineChart
-          labels={compare.data.years.map(fy)} yTitle="GDDP (₹ crore)" format={(v) => crore(v)}
+          labels={compare.data.years.map(fy)} yTitle={unit} showValues labelFormat={(v) => num(v, 0)} format={(v) => crore(v)}
           series={compare.data.series.map((s, i) => ({
             label: peers.find((p) => p.id === s.districtId)?.name ?? String(s.districtId),
             data: s.values, color: seriesColor(i), emphasis: s.districtId === district.id,
@@ -102,7 +102,7 @@ function RankingTable({ state }: { state: StateResponse }) {
 }
 
 /** Full-screen view of the state GSDP: trend, GDDP by division, and the district ranking. */
-export function StateGddpExpanded({ state }: { state: StateResponse }) {
+export function StateGddpExpanded({ state, unit }: { state: StateResponse; unit?: string }) {
   const [tab, setTab] = useState<'trend' | 'division' | 'ranking'>('trend')
   const byDivision = useMemo(() => {
     const m = new Map<string, number>()
@@ -114,7 +114,7 @@ export function StateGddpExpanded({ state }: { state: StateResponse }) {
   return (
     <ChartPanel
       title={title} reference={REFERENCE} canDownload={tab !== 'ranking'} plain={tab === 'ranking'}
-      description={tab === 'trend' ? describeTrend(state.trend.map((t) => fy(t.year)), state.trend.map((t) => t.gddp), crore) : tab === 'division' ? describeValues(byDivision.map(([d]) => d), byDivision.map(([, v]) => v), '₹ crore') : undefined}
+      description={tab === 'trend' ? describeTrend(state.trend.map((t) => fy(t.year)), state.trend.map((t) => t.gddp), crore) : tab === 'division' ? describeValues(byDivision.map(([d]) => d), byDivision.map(([, v]) => v), unit, (v) => num(v, 0)) : undefined}
       tabs={(
         <TabList label="GSDP view">
           <Tab selected={tab === 'trend'} onSelect={() => setTab('trend')}>State trend</Tab>
@@ -125,11 +125,11 @@ export function StateGddpExpanded({ state }: { state: StateResponse }) {
     >
       {tab === 'trend' ? (
         <LineChart
-          labels={state.trend.map((t) => fy(t.year))} yTitle="GSDP (₹ crore)" format={(v) => crore(v)}
+          labels={state.trend.map((t) => fy(t.year))} yTitle={unit} showValues labelFormat={(v) => num(v, 0)} format={(v) => crore(v)}
           series={[{ label: 'Maharashtra', data: state.trend.map((t) => t.gddp), color: seriesColor(1), emphasis: true }]}
         />
       ) : tab === 'division' ? (
-        <BarChart horizontal labels={byDivision.map(([d]) => d)} values={byDivision.map(([, v]) => v)} format={crore} unit="₹ crore" color={seriesColor(1)} />
+        <BarChart horizontal showValues labels={byDivision.map(([d]) => d)} values={byDivision.map(([, v]) => v)} format={crore} labelFormat={(v) => num(v, 0)} unit={unit} color={seriesColor(1)} />
       ) : <RankingTable state={state} />}
     </ChartPanel>
   )

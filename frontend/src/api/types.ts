@@ -38,7 +38,7 @@ export interface StateResponse {
 }
 
 export interface SectionSummary { id: string; title: string; description: string; cards: { id: string; title: string; kind: string }[] }
-export interface CardColumn { key: string; label: string; unit?: string; agg?: 'sum' | 'avg'; total?: boolean }
+export interface CardColumn { key: string; label: string; unit?: string; decimals?: number; agg?: 'sum' | 'avg'; total?: boolean }
 export interface CardData {
   id: string; title: string; kind: 'kpis' | 'breakdown' | 'taluka';
   columns: CardColumn[];
